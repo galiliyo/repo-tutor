@@ -2,3 +2,4 @@
 
 export * from './plugin';
 export * from './registry';
+export { JavaScriptPlugin } from './javascript';

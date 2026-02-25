@@ -6,6 +6,8 @@ export interface ASTNode {
   text?: string;
   startPosition?: { row: number; column: number };
   endPosition?: { row: number; column: number };
+  /** File path this AST was parsed from (used internally by plugins) */
+  filePath?: string;
 }
 
 export interface Import {
