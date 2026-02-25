@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://repo-tutor.dev/schemas/EvidencePack.schema.json",
+  "title": "EvidencePack",
+  "description": "Curated code context sent to LLM for chapter generation",
+  "type": "object",
+  "properties": {
+    "chapterId": {
+      "type": "string",
+      "description": "The chapter this evidence supports"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Relative path to the file"
+          },
+          "language": {
+            "type": "string",
+            "description": "Programming language of the file"
+          },
+          "content": {
+            "type": "string",
+            "description": "File content (may be truncated)"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether the content was truncated"
+          },
+          "relevantLines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": { "type": "integer" },
+                "end": { "type": "integer" },
+                "reason": { "type": "string" }
+              },
+              "required": ["start", "end"]
+            },
+            "description": "Specific line ranges that are most relevant"
+          }
+        },
+        "required": ["path", "content"]
+      }
+    },
+    "symbols": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["function", "class", "method", "variable", "type", "interface"]
+          },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "signature": { "type": "string" }
+        },
+        "required": ["name", "kind", "file"]
+      },
+      "description": "Key symbols relevant to the chapter"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "required": ["from", "to"]
+      },
+      "description": "Import/dependency relationships"
+    },
+    "redactionsApplied": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of redaction rules that were applied"
+    },
+    "totalTokensEstimate": {
+      "type": "integer",
+      "description": "Estimated token count for this evidence pack"
+    }
+  },
+  "required": ["chapterId", "files"]
+}

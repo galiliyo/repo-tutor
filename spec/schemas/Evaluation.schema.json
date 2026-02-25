@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://repo-tutor.dev/schemas/Evaluation.schema.json",
+  "title": "Evaluation",
+  "description": "Evaluation of a user's answer to a quiz question",
+  "type": "object",
+  "properties": {
+    "questionId": {
+      "type": "string"
+    },
+    "userAnswer": {
+      "type": "string",
+      "description": "The answer the user provided"
+    },
+    "isCorrect": {
+      "type": "boolean",
+      "description": "Whether the answer is correct (or substantially correct)"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Score from 0.0 to 1.0 for partial credit"
+    },
+    "keyPointsCovered": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Which key points the user's answer addressed"
+    },
+    "keyPointsMissing": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Which key points were missing from the answer"
+    },
+    "misconceptions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Identified misconceptions in the user's answer"
+    },
+    "feedback": {
+      "type": "string",
+      "description": "Specific, constructive feedback on the answer"
+    },
+    "explanation": {
+      "type": "string",
+      "description": "Explanation of why the correct answer is correct"
+    },
+    "hints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Hints to guide understanding if incorrect"
+    },
+    "encouragement": {
+      "type": "string",
+      "description": "Brief positive note"
+    }
+  },
+  "required": ["questionId", "userAnswer", "isCorrect", "score", "feedback"]
+}

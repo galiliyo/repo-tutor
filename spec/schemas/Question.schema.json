@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://repo-tutor.dev/schemas/Question.schema.json",
+  "title": "Question",
+  "description": "A quiz question for a chapter",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the question"
+    },
+    "chapterId": {
+      "type": "string",
+      "description": "The chapter this question belongs to"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["multiple-choice", "true-false", "free-text", "code-completion"],
+      "description": "Question format"
+    },
+    "bloomLevel": {
+      "type": "string",
+      "enum": ["remembering", "understanding", "applying", "analyzing", "evaluating"],
+      "description": "Bloom's Taxonomy cognitive level"
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["easy", "medium", "hard"]
+    },
+    "question": {
+      "type": "string",
+      "description": "The question text"
+    },
+    "options": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Options for multiple-choice questions"
+    },
+    "correctAnswer": {
+      "type": "string",
+      "description": "The correct answer"
+    },
+    "keyPoints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key points a correct free-text answer should cover"
+    },
+    "rubric": {
+      "type": "object",
+      "properties": {
+        "fullCredit": { "type": "string" },
+        "partialCredit": { "type": "string" },
+        "noCredit": { "type": "string" }
+      },
+      "description": "Scoring guidance for free-text questions"
+    },
+    "explanation": {
+      "type": "string",
+      "description": "Explanation shown after answering"
+    },
+    "relatedObjective": {
+      "type": "string",
+      "description": "Which learning objective this question tests"
+    },
+    "relatedCode": {
+      "type": "object",
+      "properties": {
+        "file": { "type": "string" },
+        "lines": {
+          "type": "array",
+          "items": { "type": "integer" }
+        }
+      },
+      "description": "Code reference for this question"
+    }
+  },
+  "required": ["id", "chapterId", "type", "bloomLevel", "difficulty", "question", "correctAnswer"]
+}

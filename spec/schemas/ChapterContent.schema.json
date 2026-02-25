@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://repo-tutor.dev/schemas/ChapterContent.schema.json",
+  "title": "ChapterContent",
+  "description": "Generated chapter content from LLM",
+  "type": "object",
+  "properties": {
+    "chapterId": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "heading": {
+            "type": "string",
+            "description": "Section heading"
+          },
+          "content": {
+            "type": "string",
+            "description": "Markdown content for this section"
+          },
+          "codeReferences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": { "type": "string" },
+                "startLine": { "type": "integer" },
+                "endLine": { "type": "integer" }
+              },
+              "required": ["file"]
+            }
+          },
+          "diagram": {
+            "type": "string",
+            "description": "Optional Mermaid diagram for this section"
+          }
+        },
+        "required": ["heading", "content"]
+      },
+      "minItems": 1
+    },
+    "keyTakeaways": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Summary of key points from this chapter"
+    },
+    "bridgeToNext": {
+      "type": "string",
+      "description": "How this chapter connects to the next one"
+    },
+    "patternsReferenced": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "learnMoreUrl": { "type": "string", "format": "uri" }
+        },
+        "required": ["name"]
+      },
+      "description": "CS concepts and design patterns referenced in this chapter"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["chapterId", "title", "sections", "keyTakeaways"]
+}

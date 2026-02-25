@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://repo-tutor.dev/schemas/Chapter.schema.json",
+  "title": "Chapter",
+  "description": "A learning chapter definition",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the chapter"
+    },
+    "title": {
+      "type": "string",
+      "description": "Display title for the chapter"
+    },
+    "order": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Chapter sequence number"
+    },
+    "focus": {
+      "type": "string",
+      "enum": [
+        "structure",
+        "entry-point",
+        "data-flow",
+        "module",
+        "pattern",
+        "bootstrap",
+        "state-management",
+        "http",
+        "database",
+        "auth",
+        "error-handling"
+      ],
+      "description": "The primary focus area of this chapter"
+    },
+    "targetFiles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Files relevant to this chapter"
+    },
+    "prerequisites": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Chapter IDs that should be completed first"
+    },
+    "learningObjectives": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "What the learner should understand after this chapter"
+    },
+    "estimatedComplexity": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Relative complexity of this chapter's content"
+    }
+  },
+  "required": ["id", "title", "order", "focus", "targetFiles", "learningObjectives"]
+}

@@ -1,0 +1,197 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://repo-tutor.dev/schemas/AnalysisResult.schema.json",
+  "title": "AnalysisResult",
+  "description": "Output of local repository analysis",
+  "type": "object",
+  "properties": {
+    "repoPath": {
+      "type": "string",
+      "description": "Absolute path to the repository root"
+    },
+    "languages": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Programming languages detected in the repository"
+    },
+    "entryPoints": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/FileReference" },
+      "description": "Detected application entry points"
+    },
+    "dependencyGraph": {
+      "$ref": "#/definitions/DependencyGraph"
+    },
+    "modules": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Module" },
+      "description": "Logical modules/packages in the repository"
+    },
+    "patterns": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/PatternDetection" },
+      "description": "Detected architectural and design patterns"
+    },
+    "http": {
+      "$ref": "#/definitions/HttpAnalysis",
+      "description": "HTTP/API layer analysis (if detected)"
+    },
+    "stateManagement": {
+      "$ref": "#/definitions/StateManagementAnalysis",
+      "description": "State management analysis (if detected)"
+    },
+    "analyzedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["repoPath", "languages", "entryPoints", "dependencyGraph", "modules", "analyzedAt"],
+  "definitions": {
+    "FileReference": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "reason": { "type": "string" }
+      },
+      "required": ["path"]
+    },
+    "DependencyGraph": {
+      "type": "object",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string" },
+              "language": { "type": "string" },
+              "loc": { "type": "integer" }
+            },
+            "required": ["path"]
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "weight": { "type": "integer" }
+            },
+            "required": ["from", "to"]
+          }
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "description": "Topological sort into dependency layers"
+        }
+      },
+      "required": ["nodes", "edges"]
+    },
+    "Module": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "path": { "type": "string" },
+        "description": { "type": "string" },
+        "fileCount": { "type": "integer" },
+        "importCount": { "type": "integer" },
+        "exportCount": { "type": "integer" }
+      },
+      "required": ["name", "path"]
+    },
+    "PatternDetection": {
+      "type": "object",
+      "properties": {
+        "pattern": { "type": "string" },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        },
+        "evidence": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "indicators": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "explanation": { "type": "string" },
+        "learnMoreUrl": { "type": "string", "format": "uri" }
+      },
+      "required": ["pattern", "confidence"]
+    },
+    "HttpAnalysis": {
+      "type": "object",
+      "properties": {
+        "framework": {
+          "type": "string",
+          "enum": ["express", "fastify", "hono", "koa", "nextjs", "fastapi", "flask", "django", "none", "unknown"]
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "method": { "type": "string" },
+              "path": { "type": "string" },
+              "handler": { "type": "string" },
+              "file": { "type": "string" },
+              "line": { "type": "integer" }
+            },
+            "required": ["method", "path", "file"]
+          }
+        },
+        "middleware": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "scope": { "type": "string" },
+              "file": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "StateManagementAnalysis": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["redux", "zustand", "mobx", "context", "pinia", "vuex", "signals", "stores", "custom", "none"]
+        },
+        "stores": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "file": { "type": "string" }
+            }
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "selectors": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
