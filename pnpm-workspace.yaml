@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+
+onlyBuiltDependencies:
+  - esbuild
+  - tree-sitter
+  - tree-sitter-python

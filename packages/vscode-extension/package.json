@@ -1,0 +1,53 @@
+{
+  "name": "@repo-tutor/vscode",
+  "displayName": "Repo Tutor",
+  "description": "Learn unfamiliar codebases through guided chapters and quizzes",
+  "version": "0.1.0",
+  "publisher": "repo-tutor",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Education", "Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "repo-tutor.startLearning",
+        "title": "Start Learning",
+        "category": "Repo Tutor"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "repo-tutor",
+          "title": "Repo Tutor",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "views": {
+      "repo-tutor": [
+        {
+          "id": "repo-tutor.chapters",
+          "name": "Chapters"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "pnpm build --watch",
+    "package": "vsce package",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@repo-tutor/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  }
+}
