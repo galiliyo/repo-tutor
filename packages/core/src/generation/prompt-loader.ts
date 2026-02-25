@@ -4,7 +4,14 @@ import Handlebars from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export class PromptLoader {
+/**
+ * Interface for prompt loading - used for dependency injection and testing
+ */
+export interface IPromptLoader {
+  load(name: string, variables: Record<string, unknown>): string;
+}
+
+export class PromptLoader implements IPromptLoader {
   private cache: Map<string, HandlebarsTemplateDelegate> = new Map();
   private promptsDir: string;
 

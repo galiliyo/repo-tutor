@@ -9,7 +9,14 @@ export interface LLMResponse {
   tokensUsed: number;
 }
 
-export class LLMClient {
+/**
+ * Interface for LLM completion - used for dependency injection and testing
+ */
+export interface ILLMClient {
+  complete(prompt: string, systemPrompt?: string): Promise<LLMResponse>;
+}
+
+export class LLMClient implements ILLMClient {
   private config: LLMConfig | null = null;
   private openai: OpenAI | null = null;
   private anthropic: Anthropic | null = null;
