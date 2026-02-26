@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import { startLearningCommand } from './commands/startLearning';
 import { configureApiKeyCommand } from './commands/configureApiKey';
-import { ChaptersTreeProvider } from './views';
+import { ChaptersTreeProvider, LearningPanel } from './views';
 
 let chaptersTreeProvider: ChaptersTreeProvider;
 
@@ -76,8 +76,9 @@ async function selectChapterCommand(chapterId: string, context: vscode.Extension
   // Update current chapter
   chaptersTreeProvider.setCurrentChapter(chapterId);
 
-  // TODO: Open main learning webview with this chapter
-  vscode.window.showInformationMessage(`Selected chapter: ${chapter.title}`);
+  // Open learning panel and load chapter
+  const panel = LearningPanel.show(context.extensionUri, session);
+  panel.loadChapter(chapterId);
 }
 
 export function getChaptersTreeProvider(): ChaptersTreeProvider {

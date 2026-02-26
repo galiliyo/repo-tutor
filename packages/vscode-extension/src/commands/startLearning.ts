@@ -3,8 +3,9 @@
 import * as vscode from 'vscode';
 import { getCoreAdapter, getDefaultUserContext } from '../core-adapter';
 import { getSettings, getApiKey, hasApiKey } from '../settings';
-import { SecurityConfigPanel } from '../views';
+import { SecurityConfigPanel, LearningPanel } from '../views';
 import { configureApiKeyCommand } from './configureApiKey';
+import { getChaptersTreeProvider } from '../extension';
 
 export async function startLearningCommand(context: vscode.ExtensionContext) {
   const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -87,15 +88,20 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
 
         progress.report({ message: 'Opening tutorial...', increment: 90 });
 
-        // Store session state
-        context.workspaceState.update('repoTutor.session', {
+        // Store session state via tree provider
+        const session = {
           repoPath,
           analysisResult,
           chapters,
           securityConfig: securityResult.config,
           userContext,
+          currentChapterId: chapters.length > 0 ? chapters[0].id : null,
+          progress: {},
           startedAt: new Date().toISOString(),
-        });
+        };
+
+        const treeProvider = getChaptersTreeProvider();
+        treeProvider.setSession(session as any);
 
         // Show success and refresh chapters view
         vscode.window.showInformationMessage(
@@ -105,7 +111,11 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
         // Reveal the chapters sidebar
         vscode.commands.executeCommand('repo-tutor.chapters.focus');
 
-        // TODO: Open main learning webview panel
+        // Open learning panel with first chapter
+        if (chapters.length > 0) {
+          const panel = LearningPanel.show(context.extensionUri, session as any);
+          panel.loadChapter(chapters[0].id);
+        }
 
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
