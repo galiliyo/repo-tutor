@@ -132,4 +132,22 @@ export class Redactor {
       redactions: Array.from(redactionSet),
     };
   }
+
+  /**
+   * Check if content contains potential secrets without modifying it.
+   *
+   * @param content - The content to scan
+   * @returns True if any secret patterns are detected
+   */
+  containsSecrets(content: string): boolean {
+    for (const { pattern } of PATTERNS) {
+      // Reset regex lastIndex for global patterns
+      pattern.lastIndex = 0;
+
+      if (pattern.test(content)) {
+        return true;
+      }
+    }
+    return false;
+  }
 }

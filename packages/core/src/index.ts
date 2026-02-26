@@ -7,3 +7,4 @@ export * from './analysis';
 export * from './generation';
 export * from './quiz';
 export * from './privacy';
+export { RepoTutorCore } from './core';
