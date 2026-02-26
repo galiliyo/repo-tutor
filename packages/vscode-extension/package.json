@@ -15,14 +15,41 @@
       {
         "command": "repo-tutor.startLearning",
         "title": "Start Learning",
-        "category": "Repo Tutor"
+        "category": "Repo Tutor",
+        "icon": "$(play)"
       },
       {
         "command": "repo-tutor.configureApiKey",
         "title": "Configure API Key",
-        "category": "Repo Tutor"
+        "category": "Repo Tutor",
+        "icon": "$(key)"
+      },
+      {
+        "command": "repo-tutor.refreshChapters",
+        "title": "Refresh Chapters",
+        "category": "Repo Tutor",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "repo-tutor.clearSession",
+        "title": "Clear Session",
+        "category": "Repo Tutor",
+        "icon": "$(trash)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "repo-tutor.refreshChapters",
+          "when": "view == repo-tutor.chapters",
+          "group": "navigation"
+        },
+        {
+          "command": "repo-tutor.clearSession",
+          "when": "view == repo-tutor.chapters"
+        }
+      ]
+    },
     "configuration": {
       "title": "Repo Tutor",
       "properties": {
@@ -56,7 +83,13 @@
           "name": "Chapters"
         }
       ]
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "repo-tutor.chapters",
+        "contents": "No learning session active.\n[Start Learning](command:repo-tutor.startLearning)\n\nOr configure your API key first:\n[Configure API Key](command:repo-tutor.configureApiKey)"
+      }
+    ]
   },
   "scripts": {
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
