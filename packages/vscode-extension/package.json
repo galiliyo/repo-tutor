@@ -16,8 +16,30 @@
         "command": "repo-tutor.startLearning",
         "title": "Start Learning",
         "category": "Repo Tutor"
+      },
+      {
+        "command": "repo-tutor.configureApiKey",
+        "title": "Configure API Key",
+        "category": "Repo Tutor"
       }
     ],
+    "configuration": {
+      "title": "Repo Tutor",
+      "properties": {
+        "repoTutor.llm.provider": {
+          "type": "string",
+          "default": "anthropic",
+          "enum": ["anthropic", "openai"],
+          "enumDescriptions": ["Anthropic Claude", "OpenAI GPT"],
+          "description": "LLM provider to use"
+        },
+        "repoTutor.llm.model": {
+          "type": "string",
+          "default": "claude-3-5-sonnet-20241022",
+          "description": "Model to use for generation"
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
