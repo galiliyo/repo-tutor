@@ -4,7 +4,7 @@ import type { ChapterContent } from './chapter';
 import type { AnalysisResult } from './analysis';
 
 export type SecurityPreset = 'standard' | 'cautious' | 'strict' | 'custom';
-export type LLMProvider = 'openai' | 'anthropic';
+export type LLMProvider = 'openai' | 'anthropic' | 'ollama' | 'gemini' | 'openrouter' | 'groq';
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 
 export interface SecurityConfig {
@@ -25,6 +25,7 @@ export interface LLMConfig {
   provider: LLMProvider;
   apiKey: string;
   model: string;
+  baseUrl?: string;
   maxTokens?: number;
   temperature?: number;
 }
