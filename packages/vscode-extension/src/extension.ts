@@ -1,9 +1,7 @@
-// packages/vscode-extension/src/extension.ts
-
 import * as vscode from 'vscode';
 import { startLearningCommand } from './commands/startLearning';
 import { configureApiKeyCommand } from './commands/configureApiKey';
-import { ChaptersTreeProvider, LearningPanel } from './views';
+import { ChaptersTreeProvider, LearningPanel, ModelConfigView, StatusBarManager } from './views';
 
 let chaptersTreeProvider: ChaptersTreeProvider;
 
@@ -19,6 +17,26 @@ export function activate(context: vscode.ExtensionContext) {
     showCollapseAll: false,
   });
   context.subscriptions.push(chaptersTreeView);
+
+  // Register model config sidebar view
+  const modelConfigView = new ModelConfigView(context.extensionUri, context.secrets);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(ModelConfigView.viewType, modelConfigView)
+  );
+
+  // Register status bar
+  const statusBar = new StatusBarManager(context.secrets);
+  modelConfigView.setStatusBar(statusBar);
+  context.subscriptions.push(statusBar);
+
+  // Refresh status bar when settings change
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('repoTutor')) {
+        statusBar.refresh();
+      }
+    })
+  );
 
   // Register commands
   context.subscriptions.push(
@@ -73,10 +91,8 @@ async function selectChapterCommand(chapterId: string, context: vscode.Extension
     return;
   }
 
-  // Update current chapter
   chaptersTreeProvider.setCurrentChapter(chapterId);
 
-  // Open learning panel and load chapter
   const panel = LearningPanel.show(context.extensionUri, session);
   panel.loadChapter(chapterId);
 }
