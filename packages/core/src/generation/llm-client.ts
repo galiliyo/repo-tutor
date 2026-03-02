@@ -2,7 +2,9 @@
 
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import type { LLMConfig } from '../types';
+import type { LLMConfig, Logger } from '../types';
+
+const noopLogger: Logger = { info() {}, warn() {}, error() {} };
 
 export interface LLMResponse {
   content: string;
@@ -20,8 +22,15 @@ export class LLMClient implements ILLMClient {
   private config: LLMConfig | null = null;
   private openai: OpenAI | null = null;
   private anthropic: Anthropic | null = null;
+  private log: Logger;
+
+  constructor(logger?: Logger) {
+    this.log = logger ?? noopLogger;
+  }
 
   setConfig(config: LLMConfig): void {
+    this.log.info(`Config: provider=${config.provider} model=${config.model} baseUrl=${config.baseUrl ?? '(default)'}`);
+
     this.config = config;
 
     if (config.provider === 'anthropic') {
@@ -45,11 +54,22 @@ export class LLMClient implements ILLMClient {
       throw new Error('LLM config not set');
     }
 
-    if (this.config.provider === 'anthropic') {
-      return this.completeAnthropic(prompt, systemPrompt);
-    }
+    this.log.info(`► Request [${this.config.provider}/${this.config.model}]`);
+    if (systemPrompt) this.log.info(`  system: ${systemPrompt.slice(0, 200)}...`);
+    this.log.info(`  prompt: ${prompt.slice(0, 300)}...`);
 
-    return this.completeOpenAI(prompt, systemPrompt);
+    try {
+      const result = this.config.provider === 'anthropic'
+        ? await this.completeAnthropic(prompt, systemPrompt)
+        : await this.completeOpenAI(prompt, systemPrompt);
+
+      this.log.info(`◄ Response (${result.tokensUsed} tokens, ${result.content.length} chars)`);
+      this.log.info(`  ${result.content.slice(0, 300)}...`);
+      return result;
+    } catch (err: any) {
+      this.log.error(`✖ Error: ${err.message ?? err}`);
+      throw err;
+    }
   }
 
   private async completeOpenAI(prompt: string, systemPrompt?: string): Promise<LLMResponse> {
@@ -65,7 +85,7 @@ export class LLMClient implements ILLMClient {
     const response = await this.openai.chat.completions.create({
       model: this.config.model,
       messages,
-      max_tokens: this.config.maxTokens || 4096,
+      max_tokens: this.config.maxTokens || 8192,
       temperature: this.config.temperature || 0.7,
     });
 
@@ -80,7 +100,7 @@ export class LLMClient implements ILLMClient {
 
     const response = await this.anthropic.messages.create({
       model: this.config.model,
-      max_tokens: this.config.maxTokens || 4096,
+      max_tokens: this.config.maxTokens || 8192,
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }],
     });

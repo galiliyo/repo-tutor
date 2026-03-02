@@ -27,9 +27,10 @@ export class Planner {
     // Call LLM
     const response = await this.llmClient.complete(prompt);
 
-    // Parse JSON from response (handle both fenced and raw JSON)
-    const jsonMatch = response.content.match(/```json\n?([\s\S]*?)\n?```/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : response.content;
+    let jsonStr = response.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
+    }
     const parsed = JSON.parse(jsonStr);
 
     return parsed.chapters as Chapter[];

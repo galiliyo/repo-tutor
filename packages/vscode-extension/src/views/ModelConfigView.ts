@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { LLMProvider } from '@repo-tutor/core';
-import { PROVIDER_REGISTRY, getProvider, ProviderDefinition } from '../providers/registry';
+import { PROVIDER_REGISTRY, getProvider, ProviderDefinition, RECOMMENDED_OPENROUTER_FREE, RECOMMENDED_OPENROUTER_PAID } from '../providers/registry';
 import { getSettings, updateSettings, getApiKey, setApiKey, hasApiKey } from '../settings';
 import { configureLLM, getCoreAdapter } from '../core-adapter';
 import { StatusBarManager } from './StatusBarManager';
@@ -14,7 +14,7 @@ type ConfigMessage =
   | { type: 'testConnection' };
 
 type ConfigResponse =
-  | { type: 'state'; provider: LLMProvider; model: string; baseUrl: string; hasKey: boolean; providers: ProviderDefinition[]; ollamaModels: string[] }
+  | { type: 'state'; provider: LLMProvider; model: string; baseUrl: string; hasKey: boolean; providers: ProviderDefinition[]; ollamaModels: string[]; openRouterModels: { free: Array<{id: string; name: string}>; paid: Array<{id: string; name: string}> } }
   | { type: 'testResult'; success: boolean; message: string }
   | { type: 'ollamaModels'; models: string[] };
 
@@ -94,9 +94,13 @@ export class ModelConfigView implements vscode.WebviewViewProvider {
     const settings = getSettings();
     const keyOk = await hasApiKey(this._secrets, settings.provider);
     let ollamaModels: string[] = [];
+    let openRouterModels: { free: Array<{id: string; name: string}>; paid: Array<{id: string; name: string}> } = { free: [], paid: [] };
 
     if (settings.provider === 'ollama') {
       ollamaModels = await this._fetchOllamaModels(settings.ollamaUrl);
+    }
+    if (settings.provider === 'openrouter') {
+      openRouterModels = await this._fetchOpenRouterModels();
     }
 
     this._postMessage({
@@ -107,6 +111,7 @@ export class ModelConfigView implements vscode.WebviewViewProvider {
       hasKey: keyOk,
       providers: PROVIDER_REGISTRY,
       ollamaModels,
+      openRouterModels,
     });
   }
 
@@ -118,6 +123,30 @@ export class ModelConfigView implements vscode.WebviewViewProvider {
       return data.models?.map((m) => m.name) ?? [];
     } catch {
       return [];
+    }
+  }
+
+  private async _fetchOpenRouterModels(): Promise<{ free: Array<{id: string; name: string}>; paid: Array<{id: string; name: string}> }> {
+    try {
+      const resp = await fetch('https://openrouter.ai/api/v1/models');
+      if (!resp.ok) return { free: [], paid: [] };
+      const data = (await resp.json()) as {
+        data?: Array<{ id: string; name: string; pricing?: { prompt: string; completion: string } }>;
+      };
+      if (!data.data) return { free: [], paid: [] };
+
+      const modelMap = new Map(data.data.map((m) => [m.id, m]));
+      const resolve = (ids: string[]) =>
+        ids
+          .filter((id) => modelMap.has(id))
+          .map((id) => ({ id, name: modelMap.get(id)!.name }));
+
+      return {
+        free: resolve(RECOMMENDED_OPENROUTER_FREE),
+        paid: resolve(RECOMMENDED_OPENROUTER_PAID),
+      };
+    } catch {
+      return { free: [], paid: [] };
     }
   }
 
@@ -385,12 +414,30 @@ export class ModelConfigView implements vscode.WebviewViewProvider {
         const providerDef = msg.providers.find((p) => p.id === msg.provider);
         modelEl.replaceChildren();
 
-        let modelList = providerDef ? providerDef.models : [];
-        if (msg.provider === 'ollama' && msg.ollamaModels.length > 0) {
-          modelList = msg.ollamaModels;
-        }
+        const hasOrModels = msg.provider === 'openrouter'
+          && (msg.openRouterModels.free.length > 0 || msg.openRouterModels.paid.length > 0);
 
-        if (modelList.length > 0) {
+        if (hasOrModels) {
+          const addGroup = (label, models) => {
+            if (models.length === 0) return;
+            const group = document.createElement('optgroup');
+            group.label = label;
+            models.forEach((m) => {
+              const opt = document.createElement('option');
+              opt.value = m.id;
+              opt.textContent = m.name;
+              if (m.id === msg.model) opt.selected = true;
+              group.appendChild(opt);
+            });
+            modelEl.appendChild(group);
+          };
+          addGroup('Free', msg.openRouterModels.free);
+          addGroup('Paid', msg.openRouterModels.paid);
+        } else {
+          let modelList = providerDef ? providerDef.models : [];
+          if (msg.provider === 'ollama' && msg.ollamaModels.length > 0) {
+            modelList = msg.ollamaModels;
+          }
           modelList.forEach((m) => {
             const opt = document.createElement('option');
             opt.value = m;
@@ -400,8 +447,9 @@ export class ModelConfigView implements vscode.WebviewViewProvider {
           });
         }
 
-        // If current model is not in the list, add it
-        if (msg.model && !modelList.includes(msg.model)) {
+        // If current model is not in the dropdown, add it
+        const allVals = [...modelEl.querySelectorAll('option')].map(o => o.value);
+        if (msg.model && !allVals.includes(msg.model)) {
           const opt = document.createElement('option');
           opt.value = msg.model;
           opt.textContent = msg.model;

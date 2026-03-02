@@ -2,10 +2,20 @@ import * as vscode from 'vscode';
 import { startLearningCommand } from './commands/startLearning';
 import { configureApiKeyCommand } from './commands/configureApiKey';
 import { ChaptersTreeProvider, LearningPanel, ModelConfigView, StatusBarManager } from './views';
+import { setCoreLogger } from './core-adapter';
 
 let chaptersTreeProvider: ChaptersTreeProvider;
 
 export function activate(context: vscode.ExtensionContext) {
+  // Output channel for LLM request/response logging
+  const outputChannel = vscode.window.createOutputChannel('Repo Tutor');
+  context.subscriptions.push(outputChannel);
+  setCoreLogger({
+    info: (msg) => outputChannel.appendLine(`[INFO]  ${msg}`),
+    warn: (msg) => outputChannel.appendLine(`[WARN]  ${msg}`),
+    error: (msg) => outputChannel.appendLine(`[ERROR] ${msg}`),
+  });
+
   console.log('Repo Tutor is now active');
 
   // Initialize tree view provider

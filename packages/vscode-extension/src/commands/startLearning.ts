@@ -39,6 +39,7 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
       provider: settings.provider,
       apiKey,
       model: settings.model,
+      baseUrl: settings.provider === 'ollama' ? settings.ollamaUrl + '/v1' : undefined,
     });
   }
 
@@ -101,7 +102,7 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
         };
 
         const treeProvider = getChaptersTreeProvider();
-        treeProvider.setSession(session as any);
+        treeProvider.setSession(session);
 
         // Show success and refresh chapters view
         vscode.window.showInformationMessage(
@@ -113,7 +114,7 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
 
         // Open learning panel with first chapter
         if (chapters.length > 0) {
-          const panel = LearningPanel.show(context.extensionUri, session as any);
+          const panel = LearningPanel.show(context.extensionUri, session);
           panel.loadChapter(chapters[0].id);
         }
 

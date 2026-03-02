@@ -29,10 +29,24 @@ export class ChapterWriter {
 
     const response = await this.llmClient.complete(prompt);
 
-    // Parse JSON from response (handle both fenced and raw JSON)
-    const jsonMatch = response.content.match(/```json\n?([\s\S]*?)\n?```/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : response.content;
-    const parsed = JSON.parse(jsonStr);
+    // Strip outer ```json fence if present — use greedy match to handle nested fences
+    let jsonStr = response.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (err: any) {
+      const preview = jsonStr.slice(0, 500);
+      const tail = jsonStr.slice(-200);
+      throw new Error(
+        `Failed to parse chapter JSON: ${err.message}\n` +
+        `Response length: ${jsonStr.length} chars | Tokens used: ${response.tokensUsed}\n` +
+        `Start: ${preview}...\nEnd: ...${tail}`
+      );
+    }
 
     return {
       chapterId: evidence.chapterId,

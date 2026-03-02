@@ -4,6 +4,8 @@ VS Code extension that teaches developers unfamiliar codebases through chapter-b
 
 You are running on wsl.
 
+answer with few words possible. ignore formal grammer /syntax for brevity, prefer fragments, code blocks, bullet lists, no fillers.
+
 ## Commands
 
 ```bash
@@ -13,8 +15,8 @@ pnpm --filter @repo-tutor/core test
 pnpm --filter @repo-tutor/core test:watch
 
 # The VS Code extension is bundled with esbuild, not tsc
-pnpm --filter @repo-tutor/vscode build
-pnpm --filter @repo-tutor/vscode package
+pnpm --filter repo-tutor build
+pnpm --filter repo-tutor package
 ```
 
 ## Conventions

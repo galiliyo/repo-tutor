@@ -82,9 +82,10 @@ export class QuizGenerator {
   }
 
   private parseJSON(content: string): unknown {
-    // Try to extract JSON from markdown code fence
-    const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : content;
+    let jsonStr = content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
+    }
     return JSON.parse(jsonStr);
   }
 }

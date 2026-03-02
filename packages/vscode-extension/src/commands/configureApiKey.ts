@@ -10,13 +10,50 @@ export async function configureApiKeyCommand(context: vscode.ExtensionContext): 
   // Let user pick provider
   const providerChoice = await vscode.window.showQuickPick(
     [
-      { label: 'Anthropic (Claude)', value: 'anthropic' as LLMProvider, description: 'Recommended' },
+      { label: 'Ollama (Local)', value: 'ollama' as LLMProvider, description: 'Free, runs locally' },
+      { label: 'Anthropic (Claude)', value: 'anthropic' as LLMProvider, description: 'Recommended cloud option' },
       { label: 'OpenAI (GPT)', value: 'openai' as LLMProvider },
     ],
     { placeHolder: 'Select your LLM provider' }
   );
 
   if (!providerChoice) return false;
+
+  // Handle Ollama separately (no API key needed)
+  if (providerChoice.value === 'ollama') {
+    const ollamaUrl = await vscode.window.showInputBox({
+      prompt: 'Enter Ollama server URL',
+      value: settings.ollamaUrl || 'http://localhost:11434',
+      ignoreFocusOut: true,
+    });
+
+    if (!ollamaUrl) return false;
+
+    const model = await vscode.window.showInputBox({
+      prompt: 'Enter Ollama model name (e.g., llama3, mistral, codellama)',
+      value: 'llama3',
+      ignoreFocusOut: true,
+    });
+
+    if (!model) return false;
+
+    // Update settings
+    const config = vscode.workspace.getConfiguration('repoTutor');
+    await config.update('llm.provider', 'ollama', true);
+    await config.update('llm.ollamaUrl', ollamaUrl, true);
+    await config.update('llm.model', model, true);
+
+    // Configure the core
+    configureLLM({
+      provider: 'ollama',
+      apiKey: 'ollama',
+      model,
+      baseUrl: `${ollamaUrl}/v1`,
+    });
+
+    vscode.window.showInformationMessage(`Configured Ollama at ${ollamaUrl} with model ${model}`);
+    return true;
+  }
 
   // Get existing key (masked)
   const existingKey = await getApiKey(context.secrets, providerChoice.value);

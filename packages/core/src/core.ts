@@ -11,6 +11,9 @@ import type {
   UserContext,
   LLMConfig,
   EvidencePack,
+  Answer,
+  QuestionContext,
+  Logger,
 } from './types';
 import { Analyzer } from './analysis';
 import {
@@ -21,6 +24,7 @@ import {
   Planner,
   ChapterWriter,
   EvidenceBuilder,
+  QuestionAnswerer,
 } from './generation';
 import { QuizGenerator, QuizEvaluator } from './quiz';
 import { Redactor } from './privacy';
@@ -40,14 +44,15 @@ export class RepoTutorCore {
   private evidenceBuilder: EvidenceBuilder;
   private quizGenerator: QuizGenerator | null = null;
   private quizEvaluator: QuizEvaluator | null = null;
+  private questionAnswerer: QuestionAnswerer | null = null;
   private redactor: Redactor;
 
-  constructor(promptsDir?: string) {
+  constructor(promptsDir?: string, logger?: Logger) {
     // Default to spec/prompts relative to monorepo root
     const specsDir = promptsDir || path.resolve(__dirname, '../../../spec/prompts');
 
     this.analyzer = new Analyzer();
-    this.llmClient = new LLMClient();
+    this.llmClient = new LLMClient(logger);
     this.promptLoader = new PromptLoader(specsDir);
     this.evidenceBuilder = new EvidenceBuilder();
     this.redactor = new Redactor();
@@ -66,6 +71,7 @@ export class RepoTutorCore {
     this.chapterWriter = new ChapterWriter(this.llmClient, this.promptLoader);
     this.quizGenerator = new QuizGenerator(this.llmClient, this.promptLoader);
     this.quizEvaluator = new QuizEvaluator(this.llmClient, this.promptLoader);
+    this.questionAnswerer = new QuestionAnswerer(this.llmClient, this.promptLoader);
   }
 
   /**
@@ -136,6 +142,11 @@ export class RepoTutorCore {
   async evaluateAnswer(question: Question, userAnswer: string): Promise<Evaluation> {
     this.ensureLLMConfigured();
     return this.quizEvaluator!.evaluate(question, userAnswer);
+  }
+
+  async answerQuestion(question: string, context: QuestionContext): Promise<Answer> {
+    this.ensureLLMConfigured();
+    return this.questionAnswerer!.answer(question, context);
   }
 
   /**

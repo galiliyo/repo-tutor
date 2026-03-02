@@ -77,6 +77,26 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
   },
 ];
 
+/** Curated models for OpenRouter dropdown — cross-referenced at runtime with live API. */
+export const RECOMMENDED_OPENROUTER_FREE: string[] = [
+  'nvidia/nemotron-3-nano-30b-a3b:free',
+  'arcee-ai/trinity-large-preview:free',
+  'upstage/solar-pro-3:free',
+  'stepfun/step-3.5-flash:free',
+  'liquid/lfm-2.5-1.2b-instruct:free',
+];
+
+export const RECOMMENDED_OPENROUTER_PAID: string[] = [
+  'anthropic/claude-sonnet-4.6',
+  'openai/gpt-5.2-codex',
+  'google/gemini-3-flash-preview',
+  'deepseek/deepseek-v3.2',
+  'qwen/qwen3-coder-next',
+  'mistralai/devstral-2512',
+  'anthropic/claude-opus-4.6',
+  'qwen/qwen3.5-flash-02-23',
+];
+
 export function getProvider(id: LLMProvider): ProviderDefinition | undefined {
   return PROVIDER_REGISTRY.find((p) => p.id === id);
 }

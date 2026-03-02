@@ -1,12 +1,17 @@
 // packages/vscode-extension/src/core-adapter.ts
 
-import { RepoTutorCore, LLMConfig, SecurityConfig, UserContext } from '@repo-tutor/core';
+import { RepoTutorCore, LLMConfig, SecurityConfig, UserContext, Logger } from '@repo-tutor/core';
 
 let coreInstance: RepoTutorCore | null = null;
+let coreLogger: Logger | undefined;
+
+export function setCoreLogger(logger: Logger): void {
+  coreLogger = logger;
+}
 
 export function getCoreAdapter(): RepoTutorCore {
   if (!coreInstance) {
-    coreInstance = new RepoTutorCore();
+    coreInstance = new RepoTutorCore(undefined, coreLogger);
   }
   return coreInstance;
 }

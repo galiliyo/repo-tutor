@@ -1,0 +1,108 @@
+// packages/core/src/generation/question-answerer.ts
+
+import type { ILLMClient } from './llm-client';
+import type { IPromptLoader } from './prompt-loader';
+import type { Answer } from '../types/quiz';
+import type { QuestionContext } from '../types/config';
+
+/**
+ * LLM response shape before mapping to our Answer type.
+ * Mirrors the JSON schema in spec/prompts/question-answerer.md.
+ */
+interface LLMAnswerResponse {
+  answer: string;
+  codeReferences?: Array<{
+    file: string;
+    startLine?: number;
+    endLine?: number;
+  }>;
+  relatedChapter?: string | null;
+  followUpSuggestion?: string | null;
+}
+
+export class QuestionAnswerer {
+  constructor(
+    private llmClient: ILLMClient,
+    private promptLoader: IPromptLoader
+  ) {}
+
+  async answer(question: string, context: QuestionContext): Promise<Answer> {
+    const vars = this.buildTemplateVars(question, context);
+    const prompt = this.promptLoader.load('question-answerer', vars);
+    const response = await this.llmClient.complete(prompt);
+    const parsed = this.parseJSON(response.content);
+
+    return {
+      answer: parsed.answer ?? '',
+      codeReferences: parsed.codeReferences ?? [],
+      relatedChapter: parsed.relatedChapter ?? undefined,
+      followUpSuggestion: parsed.followUpSuggestion ?? undefined,
+    };
+  }
+
+  /**
+   * Extracts prompt template variables from the domain types.
+   * Maps ChapterContent + AnalysisResult → flat Handlebars variables.
+   */
+  private buildTemplateVars(
+    question: string,
+    context: QuestionContext
+  ): Record<string, unknown> {
+    const { currentChapter, currentSection, analysisResult } = context;
+
+    // Gather code references from chapter sections as "relevant code"
+    const relevantCode = currentChapter.sections
+      .filter((s) => s.codeReferences && s.codeReferences.length > 0)
+      .flatMap((s) =>
+        (s.codeReferences ?? []).map((ref) => ({
+          file: ref.file,
+          language: this.guessLanguage(ref.file),
+          content: `Lines ${ref.startLine ?? '?'}–${ref.endLine ?? '?'}`,
+        }))
+      );
+
+    // Derive architecture pattern from detected patterns
+    const architecturePattern =
+      analysisResult.patterns.map((p) => p.pattern).join(', ') ||
+      'Not detected';
+
+    // Related modules from analysis
+    const relatedModules =
+      analysisResult.modules.map((m) => m.name).join(', ') || 'None identified';
+
+    return {
+      userQuestion: question,
+      chapterTitle: currentChapter.title,
+      sectionHeading: currentSection ?? currentChapter.sections[0]?.heading ?? '',
+      userPreferredLanguage: analysisResult.languages[0] ?? 'unknown',
+      skillLevel: 'intermediate',
+      relevantCode,
+      architecturePattern,
+      relatedModules,
+    };
+  }
+
+  private guessLanguage(filePath: string): string {
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+    const map: Record<string, string> = {
+      ts: 'typescript',
+      tsx: 'typescript',
+      js: 'javascript',
+      jsx: 'javascript',
+      py: 'python',
+      rs: 'rust',
+      go: 'go',
+      java: 'java',
+      rb: 'ruby',
+    };
+    return map[ext] ?? ext;
+  }
+
+  private parseJSON(content: string): LLMAnswerResponse {
+    let jsonStr = content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
+    }
+    return JSON.parse(jsonStr) as LLMAnswerResponse;
+  }
+}

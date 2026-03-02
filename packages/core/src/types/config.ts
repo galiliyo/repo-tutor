@@ -21,6 +21,12 @@ export interface UserContext {
   skillLevel: SkillLevel;
 }
 
+export interface Logger {
+  info(msg: string): void;
+  warn(msg: string): void;
+  error(msg: string): void;
+}
+
 export interface LLMConfig {
   provider: LLMProvider;
   apiKey: string;

@@ -1,7 +1,7 @@
 // packages/vscode-extension/src/views/ChaptersTreeProvider.ts
 
 import * as vscode from 'vscode';
-import { Chapter } from '@repo-tutor/core';
+import { Chapter, AnalysisResult, SecurityConfig, UserContext } from '@repo-tutor/core';
 
 type ChapterStatus = 'locked' | 'available' | 'in-progress' | 'completed';
 
@@ -19,9 +19,13 @@ export interface SessionProgress {
 
 export interface SessionState {
   repoPath: string;
+  analysisResult: AnalysisResult;
   chapters: Chapter[];
+  securityConfig: SecurityConfig;
+  userContext: UserContext;
   currentChapterId: string | null;
   progress: SessionProgress;
+  startedAt: string;
 }
 
 export class ChapterTreeItem extends vscode.TreeItem {

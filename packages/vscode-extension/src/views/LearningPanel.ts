@@ -138,8 +138,7 @@ export class LearningPanel {
         }
 
         const core = getCoreAdapter();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const analysisResult = (this._session as any).analysisResult;
+        const analysisResult = this._session.analysisResult;
         const userContext = getDefaultUserContext();
 
         content = await core.generateChapter(chapter, analysisResult, userContext);
@@ -211,8 +210,7 @@ export class LearningPanel {
       const answer = await core.answerQuestion(question, {
         currentChapter,
         previousChapters: [],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        analysisResult: (this._session as any).analysisResult,
+        analysisResult: this._session.analysisResult,
       });
 
       this._postMessage({ type: 'question:answered', answer });
