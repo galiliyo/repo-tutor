@@ -1,5 +1,5 @@
 {
-  "name": "@repo-tutor/vscode",
+  "name": "repo-tutor",
   "displayName": "Repo Tutor",
   "description": "Learn unfamiliar codebases through guided chapters and quizzes",
   "version": "0.1.0",
@@ -7,8 +7,13 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Education", "Other"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Education",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -55,15 +60,34 @@
       "properties": {
         "repoTutor.llm.provider": {
           "type": "string",
-          "default": "anthropic",
-          "enum": ["anthropic", "openai"],
-          "enumDescriptions": ["Anthropic Claude", "OpenAI GPT"],
+          "default": "ollama",
+          "enum": [
+            "anthropic",
+            "openai",
+            "gemini",
+            "openrouter",
+            "groq",
+            "ollama"
+          ],
+          "enumDescriptions": [
+            "Anthropic Claude",
+            "OpenAI GPT",
+            "Google Gemini",
+            "OpenRouter (multi-provider)",
+            "Groq (fast inference)",
+            "Ollama (Local, Free)"
+          ],
           "description": "LLM provider to use"
         },
         "repoTutor.llm.model": {
           "type": "string",
-          "default": "claude-3-5-sonnet-20241022",
+          "default": "llama3",
           "description": "Model to use for generation"
+        },
+        "repoTutor.llm.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama server URL"
         }
       }
     },
@@ -72,12 +96,17 @@
         {
           "id": "repo-tutor",
           "title": "Repo Tutor",
-          "icon": "$(book)"
+          "icon": "resources/book.svg"
         }
       ]
     },
     "views": {
       "repo-tutor": [
+        {
+          "type": "webview",
+          "id": "repo-tutor.modelConfig",
+          "name": "Model"
+        },
         {
           "id": "repo-tutor.chapters",
           "name": "Chapters"
@@ -94,7 +123,7 @@
   "scripts": {
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
     "watch": "pnpm build --watch",
-    "package": "vsce package",
+    "package": "vsce package --no-dependencies",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -102,6 +131,7 @@
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.7.1",
     "esbuild": "^0.20.0",
     "typescript": "^5.3.0"
   }
