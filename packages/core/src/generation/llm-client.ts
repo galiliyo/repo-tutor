@@ -24,10 +24,19 @@ export class LLMClient implements ILLMClient {
   setConfig(config: LLMConfig): void {
     this.config = config;
 
-    if (config.provider === 'openai') {
-      this.openai = new OpenAI({ apiKey: config.apiKey });
-    } else if (config.provider === 'anthropic') {
+    if (config.provider === 'anthropic') {
       this.anthropic = new Anthropic({ apiKey: config.apiKey });
+      this.openai = null;
+    } else if (config.provider === 'openai') {
+      this.openai = new OpenAI({ apiKey: config.apiKey });
+      this.anthropic = null;
+    } else {
+      // All other providers (ollama, gemini, openrouter, groq) use OpenAI-compatible API
+      this.openai = new OpenAI({
+        apiKey: config.provider === 'ollama' ? 'ollama' : config.apiKey,
+        baseURL: config.baseUrl,
+      });
+      this.anthropic = null;
     }
   }
 
@@ -36,13 +45,11 @@ export class LLMClient implements ILLMClient {
       throw new Error('LLM config not set');
     }
 
-    if (this.config.provider === 'openai') {
-      return this.completeOpenAI(prompt, systemPrompt);
-    } else if (this.config.provider === 'anthropic') {
+    if (this.config.provider === 'anthropic') {
       return this.completeAnthropic(prompt, systemPrompt);
     }
 
-    throw new Error(`Unknown provider: ${this.config.provider}`);
+    return this.completeOpenAI(prompt, systemPrompt);
   }
 
   private async completeOpenAI(prompt: string, systemPrompt?: string): Promise<LLMResponse> {
