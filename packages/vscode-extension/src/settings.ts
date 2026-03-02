@@ -1,42 +1,84 @@
-// packages/vscode-extension/src/settings.ts
-
 import * as vscode from 'vscode';
+import type { LLMProvider } from '@repo-tutor/core';
+import { getSecretKey, getProvider } from './providers/registry';
 
-const SECRET_KEY_OPENAI = 'repo-tutor.openai.apiKey';
-const SECRET_KEY_ANTHROPIC = 'repo-tutor.anthropic.apiKey';
-
-export type LLMProvider = 'openai' | 'anthropic';
+export type { LLMProvider };
 
 export interface ExtensionSettings {
   provider: LLMProvider;
   model: string;
+  ollamaUrl: string;
 }
 
 export function getSettings(): ExtensionSettings {
   const config = vscode.workspace.getConfiguration('repoTutor');
+  const provider = config.get<LLMProvider>('llm.provider', 'ollama');
+  const providerDef = getProvider(provider);
   return {
-    provider: config.get<LLMProvider>('llm.provider', 'anthropic'),
-    model: config.get<string>('llm.model', 'claude-3-5-sonnet-20241022'),
+    provider,
+    model: config.get<string>('llm.model', providerDef?.defaultModel ?? 'llama3'),
+    ollamaUrl: config.get<string>('llm.ollamaUrl', 'http://localhost:11434'),
   };
 }
 
-export async function getApiKey(secrets: vscode.SecretStorage, provider: LLMProvider): Promise<string | undefined> {
-  const key = provider === 'openai' ? SECRET_KEY_OPENAI : SECRET_KEY_ANTHROPIC;
-  return secrets.get(key);
+export async function updateSettings(
+  settings: Partial<ExtensionSettings>
+): Promise<void> {
+  const config = vscode.workspace.getConfiguration('repoTutor');
+  if (settings.provider !== undefined) {
+    await config.update('llm.provider', settings.provider, vscode.ConfigurationTarget.Global);
+  }
+  if (settings.model !== undefined) {
+    await config.update('llm.model', settings.model, vscode.ConfigurationTarget.Global);
+  }
+  if (settings.ollamaUrl !== undefined) {
+    await config.update('llm.ollamaUrl', settings.ollamaUrl, vscode.ConfigurationTarget.Global);
+  }
 }
 
-export async function setApiKey(secrets: vscode.SecretStorage, provider: LLMProvider, apiKey: string): Promise<void> {
-  const key = provider === 'openai' ? SECRET_KEY_OPENAI : SECRET_KEY_ANTHROPIC;
-  await secrets.store(key, apiKey);
+export async function getApiKey(
+  secrets: vscode.SecretStorage,
+  provider: LLMProvider
+): Promise<string | undefined> {
+  const providerDef = getProvider(provider);
+  if (providerDef && !providerDef.requiresApiKey) {
+    return 'ollama';
+  }
+  return secrets.get(getSecretKey(provider));
 }
 
-export async function deleteApiKey(secrets: vscode.SecretStorage, provider: LLMProvider): Promise<void> {
-  const key = provider === 'openai' ? SECRET_KEY_OPENAI : SECRET_KEY_ANTHROPIC;
-  await secrets.delete(key);
+export async function setApiKey(
+  secrets: vscode.SecretStorage,
+  provider: LLMProvider,
+  apiKey: string
+): Promise<void> {
+  const providerDef = getProvider(provider);
+  if (providerDef && !providerDef.requiresApiKey) {
+    return;
+  }
+  await secrets.store(getSecretKey(provider), apiKey);
 }
 
-export async function hasApiKey(secrets: vscode.SecretStorage, provider?: LLMProvider): Promise<boolean> {
+export async function deleteApiKey(
+  secrets: vscode.SecretStorage,
+  provider: LLMProvider
+): Promise<void> {
+  const providerDef = getProvider(provider);
+  if (providerDef && !providerDef.requiresApiKey) {
+    return;
+  }
+  await secrets.delete(getSecretKey(provider));
+}
+
+export async function hasApiKey(
+  secrets: vscode.SecretStorage,
+  provider?: LLMProvider
+): Promise<boolean> {
   const p = provider || getSettings().provider;
+  const providerDef = getProvider(p);
+  if (providerDef && !providerDef.requiresApiKey) {
+    return true;
+  }
   const key = await getApiKey(secrets, p);
   return !!key;
 }
