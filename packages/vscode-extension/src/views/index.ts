@@ -4,3 +4,4 @@ export { SecurityConfigPanel, type SecurityConfigResult } from './SecurityConfig
 export { ChaptersTreeProvider, ChapterTreeItem, type SessionState } from './ChaptersTreeProvider';
 export { LearningPanel } from './LearningPanel';
 export { StatusBarManager } from './StatusBarManager';
+export { ModelConfigView } from './ModelConfigView';
