@@ -242,7 +242,7 @@ export class EvidenceBuilder {
     let filteredAnalysis = analysis;
     if (trackId && trackId !== 'architecture') {
       const matchesTrack = (p: string) => {
-        const cls = classifyFileTrack(p);
+        const cls = classifyFileTrack(p, analysis.fileTrackMap);
         return cls === trackId || cls === 'shared';
       };
       filteredAnalysis = {

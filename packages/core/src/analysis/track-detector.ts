@@ -232,7 +232,15 @@ export function classifyFile(filePath: string, content?: string): TrackId | null
   return null;
 }
 
-export function classifyFileTrack(filePath: string): TrackId | 'shared' {
+export function classifyFileTrack(
+  filePath: string,
+  fileTrackMap?: Map<string, TrackId>,
+): TrackId | 'shared' {
+  if (fileTrackMap) {
+    const track = fileTrackMap.get(filePath);
+    if (track) return track;
+  }
+  // Fallback to directory-based for cases where map wasn't provided
   if (FE_DIRS.some(d => fileMatchesDir(filePath, d))) return 'frontend';
   if (BE_DIRS.some(d => fileMatchesDir(filePath, d))) return 'backend';
   if (INFRA_DIRS.some(d => fileMatchesDir(filePath, d))) return 'infra';

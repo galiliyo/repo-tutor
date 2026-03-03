@@ -22,7 +22,7 @@ export class Planner {
     if (track && track.id !== 'architecture') {
       const trackId = track.id;
       const matchesTrack = (p: string) => {
-        const cls = classifyFileTrack(p);
+        const cls = classifyFileTrack(p, analysis.fileTrackMap);
         return cls === trackId || cls === 'shared';
       };
       modules = modules.filter(m => matchesTrack(m.path));

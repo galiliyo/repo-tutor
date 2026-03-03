@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { detectTracks, classifyFileTrack, classifyFile } from '../track-detector';
-import type { AnalysisResult } from '../../types';
+import type { AnalysisResult, TrackId } from '../../types';
 
 function stubAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
   return {
@@ -211,6 +211,29 @@ describe('classifyFileTrack', () => {
   it('handles backslash paths (Windows)', () => {
     expect(classifyFileTrack('src\\components\\Button.tsx')).toBe('frontend');
     expect(classifyFileTrack('src\\routes\\users.ts')).toBe('backend');
+  });
+
+  it('uses fileTrackMap when provided', () => {
+    const map = new Map<string, TrackId>([['lib/unknown.ts', 'frontend']]);
+    expect(classifyFileTrack('lib/unknown.ts', map)).toBe('frontend');
+  });
+
+  it('falls back to directory matching when map has no entry', () => {
+    const map = new Map<string, TrackId>();
+    expect(classifyFileTrack('src/components/Foo.tsx', map)).toBe('frontend');
+  });
+
+  it('falls back to directory matching when no map provided', () => {
+    expect(classifyFileTrack('src/routes/api.ts')).toBe('backend');
+  });
+
+  it('returns shared for unknown files without map', () => {
+    expect(classifyFileTrack('lib/utils.ts')).toBe('shared');
+  });
+
+  it('returns shared for unknown files not in map', () => {
+    const map = new Map<string, TrackId>();
+    expect(classifyFileTrack('lib/utils.ts', map)).toBe('shared');
   });
 });
 
