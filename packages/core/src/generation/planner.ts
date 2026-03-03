@@ -6,6 +6,12 @@ import type { ILLMClient } from './llm-client';
 import type { IPromptLoader } from './prompt-loader';
 import { classifyFileTrack } from '../analysis/track-detector';
 
+const TRACK_PATTERN_KEYWORDS: Record<string, string[]> = {
+  frontend: ['react', 'component', 'css', 'style', 'dom', 'ui', 'vue', 'svelte', 'state management', 'redux', 'store'],
+  backend: ['express', 'middleware', 'route', 'controller', 'database', 'auth', 'api', 'rest', 'graphql', 'orm', 'migration'],
+  infra: ['docker', 'ci', 'deploy', 'kubernetes', 'terraform', 'pipeline'],
+};
+
 export class Planner {
   constructor(
     private llmClient: ILLMClient,
@@ -18,7 +24,7 @@ export class Planner {
     track?: Track,
   ): Promise<Chapter[]> {
     // Filter analysis data by track to avoid sending irrelevant modules to the LLM
-    let { modules, entryPoints, http, stateManagement } = analysis;
+    let { modules, entryPoints, http, stateManagement, patterns } = analysis;
     if (track && track.id !== 'architecture') {
       const trackId = track.id;
       const matchesTrack = (p: string) => {
@@ -33,6 +39,14 @@ export class Planner {
       } else if (trackId === 'frontend') {
         http = undefined;
       }
+
+      // Filter patterns — remove patterns clearly belonging to other tracks
+      const otherTrackKeywords = Object.entries(TRACK_PATTERN_KEYWORDS)
+        .filter(([id]) => id !== trackId)
+        .flatMap(([, kws]) => kws);
+      patterns = patterns.filter(p =>
+        !otherTrackKeywords.some(kw => p.pattern.toLowerCase().includes(kw))
+      );
     }
 
     // Render planner prompt with analysis data
@@ -41,7 +55,7 @@ export class Planner {
       skillLevel: userContext.skillLevel,
       languages: analysis.languages,
       entryPoints,
-      patterns: analysis.patterns,
+      patterns,
       http: http || { framework: 'none' },
       stateManagement: stateManagement || { type: 'none' },
       modules,

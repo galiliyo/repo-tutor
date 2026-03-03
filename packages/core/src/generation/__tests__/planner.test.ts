@@ -310,4 +310,86 @@ describe('Planner', () => {
       trackFocusTypes: undefined,
     }));
   });
+
+  it('should filter FE patterns from BE track', async () => {
+    const analysis = createMockAnalysis();
+    analysis.patterns = [
+      { pattern: 'Express middleware stack', confidence: 'high' },
+      { pattern: 'React component composition', confidence: 'high' },
+      { pattern: 'Singleton', confidence: 'medium' },
+    ];
+
+    const backendTrack: Track = {
+      id: 'backend',
+      label: 'Backend',
+      description: 'Server-side',
+      focusTypes: ['http'],
+      confidence: 0.8,
+      suggestedOrder: 3,
+    };
+
+    // Capture the prompt sent to LLM
+    const mockLLMClient: ILLMClient = {
+      complete: vi.fn().mockResolvedValue({
+        content: '{"chapters": []}',
+        tokensUsed: 50,
+      } as LLMResponse),
+    };
+
+    // Capture template vars sent to prompt loader
+    let capturedVars: any;
+    const mockPromptLoader: IPromptLoader = {
+      load: vi.fn().mockImplementation((name: string, vars: any) => {
+        capturedVars = vars;
+        return 'mocked prompt';
+      }),
+    };
+
+    const planner = new Planner(mockLLMClient, mockPromptLoader);
+    await planner.plan(analysis, createMockUserContext(), backendTrack);
+
+    // patterns should NOT include React-related pattern
+    const patternNames = capturedVars.patterns.map((p: any) => p.pattern);
+    expect(patternNames).toContain('Express middleware stack');
+    expect(patternNames).toContain('Singleton'); // generic, not FE-specific
+    expect(patternNames).not.toContain('React component composition');
+  });
+
+  it('should not filter patterns for architecture track', async () => {
+    const analysis = createMockAnalysis();
+    analysis.patterns = [
+      { pattern: 'Express middleware stack', confidence: 'high' },
+      { pattern: 'React component composition', confidence: 'high' },
+    ];
+
+    const archTrack: Track = {
+      id: 'architecture',
+      label: 'Architecture',
+      description: 'Overall',
+      focusTypes: ['structure'],
+      confidence: 0.9,
+      suggestedOrder: 1,
+    };
+
+    let capturedVars: any;
+    const mockLLMClient: ILLMClient = {
+      complete: vi.fn().mockResolvedValue({
+        content: '{"chapters": []}',
+        tokensUsed: 50,
+      } as LLMResponse),
+    };
+    const mockPromptLoader: IPromptLoader = {
+      load: vi.fn().mockImplementation((name: string, vars: any) => {
+        capturedVars = vars;
+        return 'mocked prompt';
+      }),
+    };
+
+    const planner = new Planner(mockLLMClient, mockPromptLoader);
+    await planner.plan(analysis, createMockUserContext(), archTrack);
+
+    const patternNames = capturedVars.patterns.map((p: any) => p.pattern);
+    expect(patternNames).toContain('Express middleware stack');
+    expect(patternNames).toContain('React component composition');
+  });
 });
