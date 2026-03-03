@@ -1,13 +1,16 @@
 // packages/vscode-extension/src/views/LearningPanel.ts
 
 import * as vscode from 'vscode';
-import { Chapter, ChapterContent, Question, Evaluation, Answer } from '@repo-tutor/core';
+import { marked } from 'marked';
+import { Chapter, ChapterContent, Question, Evaluation, Answer, Track } from '@repo-tutor/core';
+
+const md = (text: string): string => marked.parse(text) as string;
 import { getCoreAdapter, getDefaultUserContext } from '../core-adapter';
 import { SessionState } from './ChaptersTreeProvider';
 
 // Message types from contract
 type ExtensionToWebviewMessage =
-  | { type: 'init'; chapters: Chapter[]; currentChapterId: string | null }
+  | { type: 'init'; chapters: Chapter[]; currentChapterId: string | null; tracks?: Track[]; currentTrackId?: string | null }
   | { type: 'chapter:loading'; chapterId: string }
   | { type: 'chapter:loaded'; chapter: ChapterContent }
   | { type: 'chapter:error'; chapterId: string; error: string }
@@ -15,6 +18,8 @@ type ExtensionToWebviewMessage =
   | { type: 'quiz:loaded'; questions: Question[] }
   | { type: 'answer:evaluating'; questionId: string }
   | { type: 'answer:evaluated'; evaluation: Evaluation }
+  | { type: 'answer:explanation-chunk'; questionId: string; text: string }
+  | { type: 'answer:explanation-done'; questionId: string }
   | { type: 'question:answering' }
   | { type: 'question:answered'; answer: Answer };
 
@@ -96,6 +101,11 @@ export class LearningPanel {
           type: 'init',
           chapters: this._session.chapters,
           currentChapterId: this._session.currentChapterId,
+          tracks: this._session.selectedTrackIds
+            ? (this._session.detectedTracks || []).filter(t =>
+                this._session.selectedTrackIds!.includes(t.id))
+            : [],
+          currentTrackId: this._session.currentTrackId || null,
         });
         break;
 
@@ -150,7 +160,12 @@ export class LearningPanel {
         this._generatedContent.set(chapterId, content);
       }
 
-      this._postMessage({ type: 'chapter:loaded', chapter: content });
+      // Pre-render markdown to HTML so the webview gets ready-to-display content
+      const rendered = {
+        ...content,
+        sections: content.sections.map((s) => ({ ...s, content: md(s.content) })),
+      };
+      this._postMessage({ type: 'chapter:loaded', chapter: rendered });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this._postMessage({ type: 'chapter:error', chapterId, error: errorMessage });
@@ -218,7 +233,25 @@ export class LearningPanel {
       const core = getCoreAdapter();
       const evaluation = await core.evaluateAnswer(question, answer);
 
-      this._postMessage({ type: 'answer:evaluated', evaluation });
+      const rendered = {
+        ...evaluation,
+        feedback: md(evaluation.feedback),
+        explanation: evaluation.explanation ? md(evaluation.explanation) : undefined,
+      };
+      this._postMessage({ type: 'answer:evaluated', evaluation: rendered });
+
+      // Stream detailed explanation (non-fatal)
+      // Accumulate server-side, send pre-rendered HTML each time
+      try {
+        let accumulated = '';
+        for await (const chunk of core.streamEvaluationExplanation(question, answer, evaluation)) {
+          accumulated += chunk;
+          this._postMessage({ type: 'answer:explanation-chunk', questionId, text: md(accumulated) });
+        }
+      } catch {
+        // Streaming is best-effort — static feedback already shown
+      }
+      this._postMessage({ type: 'answer:explanation-done', questionId });
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to evaluate answer: ${error}`);
     }
@@ -425,6 +458,23 @@ export class LearningPanel {
       line-height: 1.6;
       margin-bottom: 4px;
     }
+    .section table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 12px 0;
+    }
+    .section th, .section td {
+      border: 1px solid var(--vscode-panel-border);
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .section th {
+      background: var(--vscode-textCodeBlock-background);
+      font-weight: 600;
+    }
+    .section tr:nth-child(even) {
+      background: var(--vscode-textCodeBlock-background, rgba(255,255,255,0.03));
+    }
     .code-ref {
       display: inline-flex;
       align-items: center;
@@ -587,11 +637,68 @@ export class LearningPanel {
       padding-top: 16px;
       border-top: 1px solid var(--vscode-panel-border);
     }
+    .loading-feedback {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      margin-top: 12px;
+      border-radius: 8px;
+      background: var(--vscode-textBlockQuote-background);
+      color: var(--vscode-descriptionForeground);
+    }
+    .loading-feedback .loading-spinner {
+      flex-shrink: 0;
+    }
+    .loading-feedback .rotating-message {
+      animation: fadeInOut 2.5s ease-in-out infinite;
+    }
+    @keyframes fadeInOut {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+    .streaming-text {
+      margin-top: 12px;
+      padding: 16px;
+      border-radius: 8px;
+      background: var(--vscode-textBlockQuote-background);
+      line-height: 1.6;
+      position: relative;
+    }
+    .track-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .track-tab {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      cursor: pointer;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border);
+    }
+    .track-tab.active {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border-color: var(--vscode-button-background);
+    }
+    .streaming-text.streaming::after {
+      content: '\\25AE';
+      animation: blink 0.8s step-end infinite;
+      margin-left: 2px;
+      color: var(--vscode-textLink-foreground);
+    }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
   </style>
 </head>
 <body>
   <div class="sidebar">
     <h3>Chapters</h3>
+    <div id="trackTabs" class="track-tabs"></div>
     <ul class="chapter-list" id="chapterList"></ul>
   </div>
 
@@ -608,24 +715,46 @@ export class LearningPanel {
     let state = {
       chapters: [],
       currentChapterId: null,
+      tracks: [],
+      currentTrackId: null,
       currentContent: null,
       questions: [],
       currentQuestionIndex: 0,
       answers: {},
       evaluations: {},
+      streamedExplanations: {},
     };
 
     const chapterListEl = document.getElementById('chapterList');
     const mainContentEl = document.getElementById('mainContent');
 
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
+    function renderTrackTabs() {
+      const tabsEl = document.getElementById('trackTabs');
+      if (!tabsEl || !state.tracks || state.tracks.length <= 1) {
+        if (tabsEl) tabsEl.replaceChildren();
+        return;
+      }
+
+      tabsEl.replaceChildren();
+      state.tracks.forEach(track => {
+        const tab = document.createElement('div');
+        tab.className = 'track-tab' + (track.id === state.currentTrackId ? ' active' : '');
+        tab.textContent = track.label;
+        tab.addEventListener('click', () => {
+          state.currentTrackId = track.id;
+          renderTrackTabs();
+          renderChapterList();
+        });
+        tabsEl.appendChild(tab);
+      });
     }
 
     function renderChapterList() {
-      const items = state.chapters
+      const filteredChapters = state.currentTrackId
+        ? state.chapters.filter(ch => ch.trackId === state.currentTrackId)
+        : state.chapters;
+
+      const items = filteredChapters
         .sort((a, b) => a.order - b.order)
         .map(ch => {
           const li = document.createElement('li');
@@ -671,50 +800,6 @@ export class LearningPanel {
       mainContentEl.appendChild(div);
     }
 
-    function formatContent(content) {
-      // Split into blocks: fenced code blocks vs everything else
-      const blocks = content.split(/(\`\`\`[\\s\\S]*?\`\`\`)/g);
-      return blocks.map(block => {
-        if (block.startsWith('\`\`\`')) {
-          // Fenced code block — extract lang and code
-          const match = block.match(/^\`\`\`(\\w*)\\n?([\\s\\S]*?)\\n?\`\`\`$/);
-          const code = match ? escapeHtml(match[2]) : escapeHtml(block.slice(3, -3));
-          return '<pre><code>' + code + '</code></pre>';
-        }
-        // Regular content — escape then apply inline formatting
-        const escaped = escapeHtml(block);
-        const lines = escaped.split('\\n');
-        const out = [];
-        let inList = false;
-
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          const listMatch = line.match(/^\\s*[-*]\\s+(.*)/);
-
-          if (listMatch) {
-            if (!inList) { out.push('<ul>'); inList = true; }
-            out.push('<li>' + inlineFmt(listMatch[1]) + '</li>');
-          } else {
-            if (inList) { out.push('</ul>'); inList = false; }
-            if (line.trim() === '') {
-              out.push('</p><p>');
-            } else {
-              out.push(inlineFmt(line));
-            }
-          }
-        }
-        if (inList) out.push('</ul>');
-        return out.join('\\n');
-      }).join('');
-    }
-
-    function inlineFmt(text) {
-      return text
-        .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
-        .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
-        .replace(/\`(.+?)\`/g, '<code>$1</code>');
-    }
-
     function renderCodeRefs(refs) {
       const container = document.createElement('div');
       container.style.marginTop = '12px';
@@ -753,7 +838,7 @@ export class LearningPanel {
         sectionDiv.appendChild(h2);
 
         const contentDiv = document.createElement('div');
-        contentDiv.innerHTML = formatContent(section.content);
+        contentDiv.innerHTML = (section.content);
         sectionDiv.appendChild(contentDiv);
 
         if (section.codeReferences && section.codeReferences.length > 0) {
@@ -998,17 +1083,30 @@ export class LearningPanel {
         feedbackDiv.appendChild(strong);
 
         const feedbackP = document.createElement('div');
-        feedbackP.innerHTML = formatContent(evaluation.feedback);
+        // Feedback is pre-rendered to HTML by extension via marked
+        feedbackP.innerHTML = evaluation.feedback;
         feedbackDiv.appendChild(feedbackP);
 
         if (evaluation.explanation) {
           const explainDiv = document.createElement('div');
           explainDiv.style.fontStyle = 'italic';
-          explainDiv.innerHTML = formatContent(evaluation.explanation);
+          // Explanation is pre-rendered to HTML by extension via marked
+          explainDiv.innerHTML = evaluation.explanation;
           feedbackDiv.appendChild(explainDiv);
         }
 
         questionDiv.appendChild(feedbackDiv);
+
+        // Streaming explanation container
+        const streamingDiv = document.createElement('div');
+        streamingDiv.className = 'streaming-text streaming';
+        streamingDiv.id = 'streamingExplanation';
+        const streamedText = (state.streamedExplanations || {})[q.id] || '';
+        if (streamedText) {
+          // Note: Content comes from our own LLM, same trust model as formatContent usage elsewhere
+          streamingDiv.innerHTML = (streamedText);
+        }
+        questionDiv.appendChild(streamingDiv);
       }
 
       const navDiv = document.createElement('div');
@@ -1066,6 +1164,9 @@ export class LearningPanel {
         case 'init':
           state.chapters = message.chapters;
           state.currentChapterId = message.currentChapterId;
+          state.tracks = message.tracks || [];
+          state.currentTrackId = message.currentTrackId || (state.tracks[0] && state.tracks[0].id) || null;
+          renderTrackTabs();
           renderChapterList();
           if (message.currentChapterId) {
             vscode.postMessage({ type: 'chapter:request', chapterId: message.currentChapterId });
@@ -1116,15 +1217,83 @@ export class LearningPanel {
           renderQuiz(message.questions);
           break;
 
-        case 'answer:evaluating':
+        case 'answer:evaluating': {
           const submitBtn = document.getElementById('submitAnswerBtn');
           if (submitBtn) submitBtn.disabled = true;
-          break;
 
-        case 'answer:evaluated':
+          // Show animated loading feedback
+          const existingFeedback = document.querySelector('.feedback');
+          if (!existingFeedback) {
+            const questionEl = document.querySelector('.question');
+            if (questionEl) {
+              const loadingFeedback = document.createElement('div');
+              loadingFeedback.className = 'loading-feedback';
+              loadingFeedback.id = 'evaluatingFeedback';
+
+              const spinner = document.createElement('div');
+              spinner.className = 'loading-spinner';
+              loadingFeedback.appendChild(spinner);
+
+              const msgSpan = document.createElement('span');
+              msgSpan.className = 'rotating-message';
+              msgSpan.textContent = 'Checking your answer...';
+              loadingFeedback.appendChild(msgSpan);
+
+              questionEl.appendChild(loadingFeedback);
+
+              // Rotate messages
+              const messages = ['Checking your answer...', 'Analyzing key points...', 'Evaluating understanding...'];
+              let msgIdx = 0;
+              const interval = setInterval(() => {
+                msgIdx = (msgIdx + 1) % messages.length;
+                msgSpan.textContent = messages[msgIdx];
+              }, 2000);
+              loadingFeedback.dataset.interval = String(interval);
+            }
+          }
+          break;
+        }
+
+        case 'answer:evaluated': {
+          // Clear loading animation
+          const evalFeedback = document.getElementById('evaluatingFeedback');
+          if (evalFeedback) {
+            clearInterval(Number(evalFeedback.dataset.interval));
+            evalFeedback.remove();
+          }
           state.evaluations[message.evaluation.questionId] = message.evaluation;
+          state.streamedExplanations = state.streamedExplanations || {};
+          state.streamedExplanations[message.evaluation.questionId] = '';
           renderCurrentQuestion();
           break;
+        }
+
+        case 'answer:explanation-chunk': {
+          // Server sends full pre-rendered HTML (accumulated + converted via marked), just replace.
+          // Content originates from our own LLM explanation pipeline, not arbitrary user input.
+          state.streamedExplanations = state.streamedExplanations || {};
+          state.streamedExplanations[message.questionId] = message.text;
+          const streamEl = document.getElementById('streamingExplanation');
+          if (streamEl) {
+            streamEl.innerHTML = message.text;
+            streamEl.classList.add('streaming');
+            streamEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+          break;
+        }
+
+        case 'answer:explanation-done': {
+          const doneEl = document.getElementById('streamingExplanation');
+          if (doneEl) {
+            doneEl.classList.remove('streaming');
+            const finalText = (state.streamedExplanations || {})[message.questionId] || '';
+            if (finalText) {
+              // Note: Content comes from our own LLM, same trust model as formatContent usage elsewhere in this file
+              doneEl.innerHTML = (finalText);
+            }
+          }
+          break;
+        }
 
         case 'question:answering':
           const qaAnswer = document.getElementById('qaAnswer');
