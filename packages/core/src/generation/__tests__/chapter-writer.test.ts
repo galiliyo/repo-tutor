@@ -222,6 +222,81 @@ describe('ChapterWriter', () => {
     await expect(writer.generate(evidence, 'Title', [], userContext)).rejects.toThrow();
   });
 
+  describe('generateOutline', () => {
+    it('should return a ChapterOutline with sections and takeaways', async () => {
+      const mockResponse: LLMResponse = {
+        content: JSON.stringify({
+          chapterId: 'ch-1',
+          title: 'Overview',
+          sections: [{ heading: 'Structure', summary: 'Project layout overview.' }],
+          keyTakeaways: ['The project uses a monorepo'],
+        }),
+        tokensUsed: 50,
+      };
+
+      const mockLLMClient: ILLMClient = { complete: vi.fn().mockResolvedValue(mockResponse) };
+      const mockPromptLoader: IPromptLoader = { load: vi.fn().mockReturnValue('prompt') };
+
+      const writer = new ChapterWriter(mockLLMClient, mockPromptLoader);
+      const evidence = createMockEvidence();
+
+      const result = await writer.generateOutline(
+        evidence,
+        'Overview',
+        ['Understand structure'],
+        { preferredLanguage: 'TypeScript', skillLevel: 'intermediate' }
+      );
+
+      expect(result.chapterId).toBe('ch-1');
+      expect(result.sections).toHaveLength(1);
+      expect(result.sections[0].heading).toBe('Structure');
+      expect(result.keyTakeaways).toContain('The project uses a monorepo');
+    });
+
+    it('should call prompt loader with chapter-outline template', async () => {
+      const mockLLMClient: ILLMClient = {
+        complete: vi.fn().mockResolvedValue({
+          content: '{"title": "Test", "sections": [], "keyTakeaways": []}',
+          tokensUsed: 100,
+        } as LLMResponse),
+      };
+      const mockPromptLoader: IPromptLoader = { load: vi.fn().mockReturnValue('prompt') };
+      const writer = new ChapterWriter(mockLLMClient, mockPromptLoader);
+
+      await writer.generateOutline(
+        createMockEvidence(),
+        'Title',
+        ['Obj'],
+        { preferredLanguage: 'TypeScript', skillLevel: 'intermediate' }
+      );
+
+      expect(mockPromptLoader.load).toHaveBeenCalledWith('chapter-outline', expect.objectContaining({
+        chapterTitle: 'Title',
+        learningObjectives: ['Obj'],
+      }));
+    });
+
+    it('should handle code-fenced JSON', async () => {
+      const mockLLMClient: ILLMClient = {
+        complete: vi.fn().mockResolvedValue({
+          content: '```json\n{"title":"T","sections":[],"keyTakeaways":[]}\n```',
+          tokensUsed: 50,
+        } as LLMResponse),
+      };
+      const mockPromptLoader: IPromptLoader = { load: vi.fn().mockReturnValue('prompt') };
+      const writer = new ChapterWriter(mockLLMClient, mockPromptLoader);
+
+      const result = await writer.generateOutline(
+        createMockEvidence(),
+        'Fallback',
+        [],
+        { preferredLanguage: 'TypeScript', skillLevel: 'intermediate' }
+      );
+
+      expect(result.title).toBe('T');
+    });
+  });
+
   it('should include generatedAt timestamp', async () => {
     const mockLLMClient: ILLMClient = {
       complete: vi.fn().mockResolvedValue({

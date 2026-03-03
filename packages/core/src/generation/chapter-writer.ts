@@ -1,6 +1,6 @@
 // packages/core/src/generation/chapter-writer.ts
 
-import type { EvidencePack, ChapterContent, UserContext } from '../types';
+import type { EvidencePack, ChapterContent, ChapterOutline, UserContext } from '../types';
 import type { ILLMClient } from './llm-client';
 import type { IPromptLoader } from './prompt-loader';
 
@@ -57,6 +57,38 @@ export class ChapterWriter {
       bridgeToNext: parsed.bridgeToNext,
       patternsReferenced: parsed.patternsReferenced,
       generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async generateOutline(
+    evidence: EvidencePack,
+    chapterTitle: string,
+    learningObjectives: string[],
+    userContext: UserContext,
+  ): Promise<ChapterOutline> {
+    const prompt = this.promptLoader.load('chapter-outline', {
+      chapterId: evidence.chapterId,
+      chapterTitle,
+      learningObjectives,
+      skillLevel: userContext.skillLevel,
+      userPreferredLanguage: userContext.preferredLanguage,
+      evidencePack: evidence,
+    });
+
+    const response = await this.llmClient.complete(prompt);
+
+    let jsonStr = response.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
+    }
+
+    const parsed = JSON.parse(jsonStr);
+
+    return {
+      chapterId: evidence.chapterId,
+      title: parsed.title || chapterTitle,
+      sections: parsed.sections || [],
+      keyTakeaways: parsed.keyTakeaways || [],
     };
   }
 }
