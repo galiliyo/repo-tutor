@@ -71,6 +71,10 @@ export class LearningPanel {
   private _generatedContent: Map<string, ChapterContent> = new Map();
   private _generatedQuizzes: Map<string, Question[]> = new Map();
   private _currentQuestions: Question[] = [];
+  private _prefetchQueue: string[] = [];
+  private _prefetching = false;
+  private _prefetchAbortController: AbortController | null = null;
+  private _inflight: Set<string> = new Set();
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -180,12 +184,25 @@ export class LearningPanel {
           throw new Error(`Chapter not found: ${chapterId}`);
         }
 
-        const core = getCoreAdapter();
-        const analysisResult = this._session.analysisResult;
-        const userContext = getDefaultUserContext();
+        // Promote: remove from prefetch queue if queued
+        this._prefetchQueue = this._prefetchQueue.filter(id => id !== chapterId);
 
-        content = await core.generateChapter(chapter, analysisResult, userContext);
-        this._generatedContent.set(chapterId, content);
+        // If already inflight from prefetch, wait for it
+        if (this._inflight.has(chapterId)) {
+          while (this._inflight.has(chapterId)) {
+            await new Promise(r => setTimeout(r, 200));
+          }
+          content = this._generatedContent.get(chapterId);
+        }
+
+        if (!content) {
+          const core = getCoreAdapter();
+          const analysisResult = this._session.analysisResult;
+          const userContext = getDefaultUserContext();
+
+          content = await core.generateChapter(chapter, analysisResult, userContext);
+          this._generatedContent.set(chapterId, content);
+        }
       }
 
       // Build set of known file paths from analysis for linkification
@@ -205,6 +222,58 @@ export class LearningPanel {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this._postMessage({ type: 'chapter:error', chapterId, error: errorMessage });
+    }
+  }
+
+  private async _prefetchChapter(chapterId: string): Promise<void> {
+    if (this._generatedContent.has(chapterId) || this._inflight.has(chapterId)) return;
+    this._inflight.add(chapterId);
+
+    try {
+      const chapter = this._session.chapters.find(c => c.id === chapterId);
+      if (!chapter) return;
+
+      const core = getCoreAdapter();
+      const content = await core.generateChapter(
+        chapter, this._session.analysisResult, getDefaultUserContext()
+      );
+      this._generatedContent.set(chapterId, content);
+    } finally {
+      this._inflight.delete(chapterId);
+    }
+  }
+
+  public startPrefetchQueue(chapterIds: string[]): void {
+    this._prefetchAbortController?.abort();
+    this._prefetchAbortController = new AbortController();
+    this._prefetchQueue = [...chapterIds];
+    this._runPrefetchQueue();
+  }
+
+  private async _runPrefetchQueue(): Promise<void> {
+    if (this._prefetching) return;
+    this._prefetching = true;
+    const signal = this._prefetchAbortController?.signal;
+
+    try {
+      while (this._prefetchQueue.length > 0) {
+        if (signal?.aborted) break;
+        const nextId = this._prefetchQueue.shift()!;
+        if (this._generatedContent.has(nextId)) continue;
+        await this._prefetchChapter(nextId);
+        // Notify webview of progress
+        const total = this._session.chapters.filter(
+          c => c.trackId === this._session.currentTrackId
+        ).length;
+        const cached = [...this._generatedContent.keys()].filter(id =>
+          this._session.chapters.find(c => c.id === id && c.trackId === this._session.currentTrackId)
+        ).length;
+        this._postMessage({
+          type: 'prefetch:progress', done: cached, total
+        } as any);
+      }
+    } finally {
+      this._prefetching = false;
     }
   }
 
