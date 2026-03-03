@@ -5,6 +5,7 @@ import type {
   AnalysisResult,
   Chapter,
   ChapterContent,
+  ChapterOutline,
   Question,
   Evaluation,
   SecurityConfig,
@@ -25,6 +26,8 @@ import {
   Planner,
   ChapterWriter,
   EvidenceBuilder,
+  BUDGET_FAST,
+  BUDGET_FULL,
   QuestionAnswerer,
 } from './generation';
 import { QuizGenerator, QuizEvaluator } from './quiz';
@@ -120,7 +123,7 @@ export class RepoTutorCore {
     this.ensureLLMConfigured();
 
     // Build evidence pack from target files
-    const evidence = await this.evidenceBuilder.build(chapter, analysis);
+    const evidence = await this.evidenceBuilder.build(chapter, analysis, BUDGET_FULL);
 
     // Redact any secrets in the evidence files (privacy is non-negotiable)
     this.redactEvidencePack(evidence);
@@ -130,6 +133,28 @@ export class RepoTutorCore {
       chapter.title,
       chapter.learningObjectives,
       userContext
+    );
+  }
+
+  /**
+   * Generate a quick outline for a chapter (fast pass).
+   * Uses a smaller evidence budget for speed.
+   */
+  async generateChapterOutline(
+    chapter: Chapter,
+    analysis: AnalysisResult,
+    userContext: UserContext,
+  ): Promise<ChapterOutline> {
+    this.ensureLLMConfigured();
+
+    const evidence = await this.evidenceBuilder.build(chapter, analysis, BUDGET_FAST);
+    this.redactEvidencePack(evidence);
+
+    return this.chapterWriter!.generateOutline(
+      evidence,
+      chapter.title,
+      chapter.learningObjectives,
+      userContext,
     );
   }
 
