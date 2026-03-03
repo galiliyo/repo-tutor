@@ -1,6 +1,7 @@
 // packages/vscode-extension/src/commands/startLearning.ts
 
 import * as vscode from 'vscode';
+import type { Track } from '@repo-tutor/core';
 import { getCoreAdapter, getDefaultUserContext } from '../core-adapter';
 import { getSettings, getApiKey, hasApiKey } from '../settings';
 import { SecurityConfigPanel, LearningPanel } from '../views';
@@ -68,37 +69,89 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
     return;
   }
 
-  // Run analysis with progress
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: 'Repo Tutor',
-      cancellable: false,
-    },
-    async (progress) => {
-      progress.report({ message: 'Analyzing codebase...', increment: 0 });
+  // Step 1: Analyze with progress
+  const core = getCoreAdapter();
+  const userContext = getDefaultUserContext();
 
-      try {
-        const core = getCoreAdapter();
-        const analysisResult = await core.analyze(repoPath, securityResult.config!);
+  let analysisResult: Awaited<ReturnType<typeof core.analyze>> | undefined;
 
+  try {
+    analysisResult = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Repo Tutor',
+        cancellable: false,
+      },
+      async (progress) => {
+        progress.report({ message: 'Analyzing codebase...', increment: 0 });
+        return core.analyze(repoPath, securityResult.config!);
+      }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    vscode.window.showErrorMessage(`Analysis failed: ${message}`);
+    return;
+  }
+
+  // Step 2: Track selection QuickPick (outside progress)
+  const detectedTracks: Track[] = analysisResult.detectedTracks || [];
+
+  const trackItems = detectedTracks
+    .sort((a, b) => a.suggestedOrder - b.suggestedOrder)
+    .map(t => ({
+      label: t.label,
+      description: `${Math.round(t.confidence * 100)}% match`,
+      detail: t.description,
+      picked: t.confidence >= 0.3,
+      track: t,
+    }));
+
+  const selectedItems = await vscode.window.showQuickPick(trackItems, {
+    title: 'Select Learning Tracks',
+    placeHolder: 'Choose which parts of the codebase to learn',
+    canPickMany: true,
+  });
+
+  if (!selectedItems || selectedItems.length === 0) {
+    vscode.window.showInformationMessage('No tracks selected, session cancelled');
+    return;
+  }
+
+  const selectedTracks = selectedItems.map(item => item.track);
+
+  // Step 3: Plan chapters per track with progress
+  try {
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Repo Tutor',
+        cancellable: false,
+      },
+      async (progress) => {
         progress.report({ message: 'Planning chapters...', increment: 50 });
 
-        const userContext = getDefaultUserContext();
-        const chapters = await core.planChapters(analysisResult, userContext);
+        const allChapters: Awaited<ReturnType<typeof core.planChapters>> = [];
+        for (const track of selectedTracks) {
+          const trackChapters = await core.planChapters(analysisResult!, userContext, track);
+          trackChapters.forEach(ch => { ch.trackId = track.id; });
+          allChapters.push(...trackChapters);
+        }
 
         progress.report({ message: 'Opening tutorial...', increment: 90 });
 
         // Store session state via tree provider
         const session = {
           repoPath,
-          analysisResult,
-          chapters,
+          analysisResult: analysisResult!,
+          chapters: allChapters,
           securityConfig: securityResult.config,
           userContext,
-          currentChapterId: chapters.length > 0 ? chapters[0].id : null,
+          currentChapterId: allChapters.length > 0 ? allChapters[0].id : null,
+          currentTrackId: selectedTracks.length > 0 ? selectedTracks[0].id : null,
           progress: {},
           startedAt: new Date().toISOString(),
+          detectedTracks: detectedTracks,
+          selectedTrackIds: selectedTracks.map(t => t.id),
         };
 
         const treeProvider = getChaptersTreeProvider();
@@ -106,22 +159,21 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
 
         // Show success and refresh chapters view
         vscode.window.showInformationMessage(
-          `Found ${chapters.length} chapters to learn about ${analysisResult.languages.join(', ')} codebase`
+          `Found ${allChapters.length} chapters across ${selectedTracks.length} track(s)`
         );
 
         // Reveal the chapters sidebar
         vscode.commands.executeCommand('repo-tutor.chapters.focus');
 
         // Open learning panel with first chapter
-        if (chapters.length > 0) {
+        if (allChapters.length > 0) {
           const panel = LearningPanel.show(context.extensionUri, session);
-          panel.loadChapter(chapters[0].id);
+          panel.loadChapter(allChapters[0].id);
         }
-
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        vscode.window.showErrorMessage(`Analysis failed: ${message}`);
       }
-    }
-  );
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    vscode.window.showErrorMessage(`Planning failed: ${message}`);
+  }
 }
