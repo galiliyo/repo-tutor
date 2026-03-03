@@ -100,7 +100,7 @@ type CoreError =
 
 ```typescript
 type ExtensionToWebviewMessage =
-  | { type: 'init'; chapters: Chapter[]; currentChapterId: string | null }
+  | { type: 'init'; chapters: Chapter[]; currentChapterId: string | null; tracks?: Track[]; currentTrackId?: string | null }
   | { type: 'chapter:loading'; chapterId: string }
   | { type: 'chapter:loaded'; chapter: ChapterContent }
   | { type: 'chapter:error'; chapterId: string; error: string }
@@ -110,6 +110,7 @@ type ExtensionToWebviewMessage =
   | { type: 'answer:evaluated'; evaluation: Evaluation }
   | { type: 'question:answering' }
   | { type: 'question:answered'; answer: Answer }
+  | { type: 'tracks:detected'; tracks: Track[] }
   | { type: 'progress:updated'; progress: SessionProgress };
 ```
 
@@ -123,6 +124,7 @@ type WebviewToExtensionMessage =
   | { type: 'quiz:submit'; questionId: string; answer: string }
   | { type: 'question:ask'; question: string }
   | { type: 'navigate'; chapterId: string }
+  | { type: 'tracks:selected'; trackIds: string[] }
   | { type: 'openFile'; file: string; line?: number };
 ```
 
@@ -141,6 +143,10 @@ interface SessionState {
 
   progress: SessionProgress;
   currentChapterId: string | null;
+
+  detectedTracks: Track[];
+  selectedTrackIds: string[];
+  currentTrackId: string | null;
 }
 
 interface SessionProgress {
