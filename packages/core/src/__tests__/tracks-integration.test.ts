@@ -63,7 +63,7 @@ describe('Track detection integration', () => {
     expect(infra.confidence).toBeGreaterThanOrEqual(0.3);
   });
 
-  it('should return no tracks (or only architecture) for repos with no signals', async () => {
+  it('should return low confidence for tracks with no signals', async () => {
     const files = ['README.md', 'LICENSE'];
     const analysis: AnalysisResult = {
       repoPath: '/tmp/empty-repo',
@@ -77,21 +77,15 @@ describe('Track detection integration', () => {
 
     const tracks = await detectTracks('/tmp/empty-repo', files, analysis);
 
-    // frontend, backend, infra should not appear (score < 0.3 threshold)
-    const fe = tracks.find(t => t.id === 'frontend');
-    const be = tracks.find(t => t.id === 'backend');
-    const infra = tracks.find(t => t.id === 'infra');
+    expect(tracks).toHaveLength(4); // all tracks always returned
 
-    expect(fe).toBeUndefined();
-    expect(be).toBeUndefined();
-    expect(infra).toBeUndefined();
+    const fe = tracks.find(t => t.id === 'frontend')!;
+    const be = tracks.find(t => t.id === 'backend')!;
+    const infra = tracks.find(t => t.id === 'infra')!;
 
-    // architecture always has base 0.3, so it may appear
-    // (only with 0 modules it stays at base 0.3 which is the threshold)
-    const arch = tracks.find(t => t.id === 'architecture');
-    if (arch) {
-      expect(arch.confidence).toBe(0.3);
-    }
+    expect(fe.confidence).toBeLessThan(0.3);
+    expect(be.confidence).toBeLessThan(0.3);
+    expect(infra.confidence).toBeLessThan(0.3);
   });
 
   it('should detect only frontend for a React-only app', async () => {
@@ -120,12 +114,9 @@ describe('Track detection integration', () => {
     const tracks = await detectTracks('/tmp/react-app', files, analysis, fileContents);
 
     const fe = tracks.find(t => t.id === 'frontend')!;
-    const be = tracks.find(t => t.id === 'backend');
+    const be = tracks.find(t => t.id === 'backend')!;
 
-    expect(fe).toBeDefined();
     expect(fe.confidence).toBeGreaterThanOrEqual(0.3);
-
-    // backend should not be detected
-    expect(be).toBeUndefined();
+    expect(be.confidence).toBeLessThan(0.3);
   });
 });

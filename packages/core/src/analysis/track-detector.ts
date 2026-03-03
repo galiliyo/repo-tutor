@@ -340,9 +340,8 @@ export async function detectTracks(
     infra: round2(scoreInfra(files)),
   };
 
-  // Build tracks, filter below 0.3
+  // Build all tracks — UI decides which to suggest (>= 0.3) vs show dimmed
   return TRACK_DEFS
-    .filter(def => scores[def.id] >= 0.3)
     .map(def => ({
       id: def.id,
       label: def.label,

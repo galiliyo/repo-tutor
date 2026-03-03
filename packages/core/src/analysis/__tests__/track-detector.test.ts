@@ -88,11 +88,16 @@ describe('detectTracks', () => {
     expect(infra!.confidence).toBeGreaterThanOrEqual(0.3);
   });
 
-  it('does not suggest tracks below 0.3 confidence for empty repos', async () => {
+  it('returns all 4 tracks even when confidence is low', async () => {
     const tracks = await detectTracks('/fake', [], stubAnalysis(), new Map());
-    for (const t of tracks) {
-      expect(t.confidence).toBeGreaterThanOrEqual(0.3);
-    }
+    expect(tracks).toHaveLength(4);
+    // FE/BE/infra should have 0 confidence with no signals
+    const fe = tracks.find(t => t.id === 'frontend')!;
+    const be = tracks.find(t => t.id === 'backend')!;
+    const infra = tracks.find(t => t.id === 'infra')!;
+    expect(fe.confidence).toBe(0);
+    expect(be.confidence).toBe(0);
+    expect(infra.confidence).toBe(0);
   });
 
   it('architecture confidence scales with module count', async () => {
