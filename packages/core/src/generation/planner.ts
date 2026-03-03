@@ -4,6 +4,7 @@ import type { AnalysisResult, Chapter, UserContext } from '../types';
 import type { Track } from '../types/track';
 import type { ILLMClient } from './llm-client';
 import type { IPromptLoader } from './prompt-loader';
+import { classifyFileTrack } from '../analysis/track-detector';
 
 export class Planner {
   constructor(
@@ -16,16 +17,34 @@ export class Planner {
     userContext: UserContext,
     track?: Track,
   ): Promise<Chapter[]> {
+    // Filter analysis data by track to avoid sending irrelevant modules to the LLM
+    let { modules, entryPoints, http, stateManagement } = analysis;
+    if (track && track.id !== 'architecture') {
+      const trackId = track.id;
+      const matchesTrack = (p: string) => {
+        const cls = classifyFileTrack(p);
+        return cls === trackId || cls === 'shared';
+      };
+      modules = modules.filter(m => matchesTrack(m.path));
+      entryPoints = entryPoints.filter(ep => matchesTrack(ep.path));
+
+      if (trackId === 'backend') {
+        stateManagement = undefined;
+      } else if (trackId === 'frontend') {
+        http = undefined;
+      }
+    }
+
     // Render planner prompt with analysis data
     const prompt = this.promptLoader.load('planner', {
       userPreferredLanguage: userContext.preferredLanguage,
       skillLevel: userContext.skillLevel,
       languages: analysis.languages,
-      entryPoints: analysis.entryPoints,
+      entryPoints,
       patterns: analysis.patterns,
-      http: analysis.http || { framework: 'none' },
-      stateManagement: analysis.stateManagement || { type: 'none' },
-      modules: analysis.modules,
+      http: http || { framework: 'none' },
+      stateManagement: stateManagement || { type: 'none' },
+      modules,
       dependencyLayers: this.formatLayers(analysis.dependencyGraph.layers),
       trackId: track?.id,
       trackLabel: track?.label,

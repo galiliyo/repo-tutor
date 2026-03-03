@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import type { Track } from '@repo-tutor/core';
 import { getCoreAdapter, getDefaultUserContext } from '../core-adapter';
 import { getSettings, getApiKey, hasApiKey } from '../settings';
+import { getProvider } from '../providers/registry';
 import { SecurityConfigPanel, LearningPanel } from '../views';
 import { configureApiKeyCommand } from './configureApiKey';
 import { getChaptersTreeProvider } from '../extension';
@@ -36,11 +37,15 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
   // Configure LLM with stored API key
   const apiKey = await getApiKey(context.secrets, settings.provider);
   if (apiKey) {
+    const providerDef = getProvider(settings.provider);
+    const baseUrl = settings.provider === 'ollama'
+      ? settings.ollamaUrl + '/v1'
+      : providerDef?.baseUrl;
     getCoreAdapter().setLLMConfig({
       provider: settings.provider,
       apiKey,
       model: settings.model,
-      baseUrl: settings.provider === 'ollama' ? settings.ollamaUrl + '/v1' : undefined,
+      baseUrl,
     });
   }
 

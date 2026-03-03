@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import { getSettings, setApiKey, getApiKey, LLMProvider } from '../settings';
 import { configureLLM } from '../core-adapter';
+import { getProvider } from '../providers/registry';
 
 export async function configureApiKeyCommand(context: vscode.ExtensionContext): Promise<boolean> {
   const settings = getSettings();
@@ -84,10 +85,12 @@ export async function configureApiKeyCommand(context: vscode.ExtensionContext): 
   }
 
   // Configure the core with new key
+  const providerDef = getProvider(providerChoice.value);
   configureLLM({
     provider: providerChoice.value,
     apiKey: apiKey.trim(),
     model: settings.model,
+    baseUrl: providerDef?.baseUrl,
   });
 
   vscode.window.showInformationMessage(`API key saved for ${providerChoice.label}`);

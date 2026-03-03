@@ -5,6 +5,34 @@ import { marked } from 'marked';
 import { Chapter, ChapterContent, Question, Evaluation, Answer, Track } from '@repo-tutor/core';
 
 const md = (text: string): string => marked.parse(text) as string;
+
+/**
+ * Post-process HTML to turn known file paths into clickable code-ref spans.
+ * Matches paths inside <code> tags and as bare text (e.g. `src/foo.ts` or src/foo.ts).
+ */
+function linkifyFilePaths(html: string, knownFiles: Set<string>): string {
+  if (knownFiles.size === 0) return html;
+
+  // Sort longest-first so `src/utils/helper.ts` matches before `src/utils`
+  const sorted = [...knownFiles].sort((a, b) => b.length - a.length);
+  // Escape for regex
+  const escaped = sorted.map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const pattern = new RegExp(
+    // Match inside <code>path</code> or bare path references, but not already inside a tag attribute
+    `(<code>)(${escaped.join('|')})(</code>)` +
+    `|(?<![/"'>=-])(${escaped.join('|')})(?=[^/\\w]|$)`,
+    'g'
+  );
+
+  return html.replace(pattern, (...args) => {
+    // Groups: 1=<code>, 2=path-in-code, 3=</code>, 4=bare-path
+    const codeOpen = args[1];
+    const codePath = args[2];
+    const barePath = args[4];
+    const filePath = codePath || barePath;
+    return `<span class="code-ref" data-file="${filePath}">${filePath}</span>`;
+  });
+}
 import { getCoreAdapter, getDefaultUserContext } from '../core-adapter';
 import { SessionState } from './ChaptersTreeProvider';
 
@@ -160,10 +188,18 @@ export class LearningPanel {
         this._generatedContent.set(chapterId, content);
       }
 
-      // Pre-render markdown to HTML so the webview gets ready-to-display content
+      // Build set of known file paths from analysis for linkification
+      const knownFiles = new Set<string>(
+        (this._session.analysisResult.dependencyGraph?.nodes ?? []).map((n) => n.path)
+      );
+
+      // Pre-render markdown to HTML, then linkify file paths into clickable refs
       const rendered = {
         ...content,
-        sections: content.sections.map((s) => ({ ...s, content: md(s.content) })),
+        sections: content.sections.map((s) => ({
+          ...s,
+          content: linkifyFilePaths(md(s.content), knownFiles),
+        })),
       };
       this._postMessage({ type: 'chapter:loaded', chapter: rendered });
     } catch (error) {

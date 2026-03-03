@@ -51,7 +51,7 @@ export const FE_FRAMEWORK_IMPORTS = [
   'react', 'vue', 'angular', 'svelte', 'solid-js', 'preact', 'lit', 'next', 'nuxt', 'remix',
 ];
 
-const FE_DIRS = [
+export const FE_DIRS = [
   'src/components', 'src/pages', 'src/views', 'src/hooks', 'src/stores', 'public/', 'static/',
 ];
 
@@ -63,27 +63,90 @@ const FE_DOM_APIS = [
 const FE_BUILD_TOOLS = ['webpack', 'vite', 'parcel', 'next', 'nuxt', 'remix'];
 
 export const BE_FRAMEWORK_IMPORTS = [
+  // JS/TS
   'express', 'fastify', 'koa', '@nestjs/core', 'hapi', 'hono', 'elysia',
+  // Python
+  'django', 'flask', 'fastapi', 'starlette', 'tornado',
+  // Java
+  'org.springframework', 'javax.servlet', 'io.quarkus', 'io.micronaut', 'io.javalin',
+  // Go
+  'github.com/gin-gonic/gin', 'github.com/labstack/echo', 'github.com/gofiber/fiber', 'github.com/go-chi/chi',
+  // PHP
+  'Illuminate\\Http', 'Symfony\\Component', 'Slim\\App',
+  // Ruby
+  'rails', 'sinatra', 'hanami', 'grape',
 ];
 
-const BE_DIRS = [
+export const BE_DIRS = [
   'src/routes', 'src/controllers', 'src/middleware', 'src/models',
   'src/services', 'src/api', 'src/handlers',
+  // Python
+  'views/', 'serializers/', 'management/',
+  // Java
+  'src/main/java', 'src/main/resources',
+  // Go
+  'cmd/', 'internal/', 'pkg/',
+  // PHP
+  'app/Http', 'app/Models', 'database/migrations',
+  // Ruby
+  'app/controllers', 'app/models', 'db/migrate',
 ];
 
 const BE_SERVER_PATTERNS = [
   'app.listen', 'createServer', 'router.get', 'router.post', 'router.put', 'router.delete',
+  // Python
+  'app.run(', 'uvicorn.run', '@app.route', '@app.get', '@app.post', 'urlpatterns', 'INSTALLED_APPS',
+  // Java
+  '@RestController', '@RequestMapping', '@GetMapping', '@PostMapping', '@SpringBootApplication',
+  // Go
+  'http.ListenAndServe', 'http.HandleFunc', 'r.GET(', 'r.POST(', 'e.GET(', 'app.Listen(',
+  // PHP
+  'Route::get', 'Route::post', '$app->run', '->middleware(',
+  // Ruby
+  'Rails.application', 'resources :',
 ];
 
 export const BE_DB_IMPORTS = [
   'pg', 'mysql2', 'mongoose', 'prisma', '@prisma/client', 'sequelize', 'typeorm', 'drizzle-orm', 'knex',
+  // Python
+  'sqlalchemy', 'django.db', 'peewee', 'psycopg2', 'pymongo',
+  // Java
+  'javax.persistence', 'org.hibernate', 'org.jooq',
+  // Go
+  'database/sql', 'gorm.io', 'github.com/jmoiron/sqlx', 'github.com/jackc/pgx',
+  // PHP
+  'Doctrine', 'Illuminate\\Database',
+  // Ruby
+  'activerecord', 'sequel', 'mongoid',
 ];
 
-const BE_AUTH_IMPORTS = ['passport', 'bcrypt', 'bcryptjs', 'jsonwebtoken', 'jose', 'next-auth'];
+const BE_AUTH_IMPORTS = [
+  'passport', 'bcrypt', 'bcryptjs', 'jsonwebtoken', 'jose', 'next-auth',
+  // Python
+  'flask_login', 'django.contrib.auth', 'passlib', 'authlib',
+  // Java
+  'org.springframework.security',
+  // Go
+  'golang.org/x/crypto', 'github.com/golang-jwt',
+  // PHP
+  'tymon/jwt-auth', 'laravel/sanctum',
+  // Ruby
+  'devise', 'omniauth',
+];
 
-const BE_QUEUE_IMPORTS = ['bull', 'bullmq', 'amqplib', 'kafkajs', 'ioredis'];
+const BE_QUEUE_IMPORTS = [
+  'bull', 'bullmq', 'amqplib', 'kafkajs', 'ioredis',
+  // Python
+  'celery', 'rq', 'dramatiq',
+  // Java
+  'javax.jms', 'org.springframework.kafka',
+  // Go
+  'github.com/Shopify/sarama',
+  // Ruby
+  'sidekiq', 'resque', 'delayed_job',
+];
 
-const ARCH_SHARED_DIRS = ['src/shared', 'src/common', 'src/lib', 'src/utils', 'packages/'];
+export const ARCH_SHARED_DIRS = ['src/shared', 'src/common', 'src/lib', 'src/utils', 'packages/'];
 
 const ARCH_MONOREPO_TOOLS = ['workspaces', 'lerna', 'nx', 'turbo'];
 
@@ -92,13 +155,16 @@ const INFRA_FILES = [
   'Jenkinsfile', 'Procfile', 'vercel.json', 'netlify.toml', 'fly.toml', 'render.yaml',
 ];
 
-const INFRA_DIRS = [
+export const INFRA_DIRS = [
   '.github/workflows', '.gitlab-ci', '.circleci', 'terraform', 'k8s', 'helm', '.changeset',
 ];
 
 // ── Helpers ──
 
-const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
+const SOURCE_EXTS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.py', '.java', '.go', '.rb', '.php',
+]);
 
 function isSourceFile(f: string): boolean {
   return SOURCE_EXTS.has(path.extname(f));
@@ -113,18 +179,29 @@ function round2(n: number): number {
 }
 
 function matchesImport(content: string, pkg: string): boolean {
-  // Match: from 'pkg' | from "pkg" | require('pkg') | require("pkg")
-  // Also handles sub-paths like 'pkg/foo'
   const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`['"]${escaped}(?:/[^'"]*)?['"]`);
-  return re.test(content);
+  const patterns: RegExp[] = [
+    // JS/TS: from 'pkg' | require('pkg') (+ sub-paths)
+    new RegExp(`['"]${escaped}(?:/[^'"]*)?['"]`),
+    // Python: import pkg | from pkg import ...
+    new RegExp(`^\\s*(?:import|from)\\s+${escaped}\\b`, 'm'),
+    // Java: import [static] pkg.Something;
+    new RegExp(`import\\s+(?:static\\s+)?${escaped}\\..*?;`),
+    // Go: "pkg" or "pkg/sub"
+    new RegExp(`"${escaped}(?:/[^"]*)?"`),
+    // PHP: use Pkg\Something;
+    new RegExp(`use\\s+${escaped}\\\\.*?;`),
+    // Ruby: require 'pkg' | gem 'pkg'
+    new RegExp(`(?:require|gem)\\s+['"]${escaped}['"]`),
+  ];
+  return patterns.some(re => re.test(content));
 }
 
 function containsAny(content: string, patterns: string[]): boolean {
   return patterns.some(p => content.includes(p));
 }
 
-function fileMatchesDir(file: string, dir: string): boolean {
+export function fileMatchesDir(file: string, dir: string): boolean {
   const normalized = file.replace(/\\/g, '/');
   const normalizedDir = dir.replace(/\\/g, '/');
   // "public/" matches files under public/
@@ -132,6 +209,14 @@ function fileMatchesDir(file: string, dir: string): boolean {
     return normalized.startsWith(normalizedDir) || normalized.startsWith(normalizedDir.slice(0, -1) + '/');
   }
   return normalized.startsWith(normalizedDir + '/');
+}
+
+export function classifyFileTrack(filePath: string): TrackId | 'shared' {
+  if (FE_DIRS.some(d => fileMatchesDir(filePath, d))) return 'frontend';
+  if (BE_DIRS.some(d => fileMatchesDir(filePath, d))) return 'backend';
+  if (INFRA_DIRS.some(d => fileMatchesDir(filePath, d))) return 'infra';
+  if (ARCH_SHARED_DIRS.some(d => fileMatchesDir(filePath, d))) return 'shared';
+  return 'shared'; // ambiguous files included in all tracks
 }
 
 async function getFileContents(

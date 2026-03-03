@@ -1,7 +1,7 @@
 // packages/core/src/analysis/__tests__/track-detector.test.ts
 
 import { describe, it, expect } from 'vitest';
-import { detectTracks } from '../track-detector';
+import { detectTracks, classifyFileTrack } from '../track-detector';
 import type { AnalysisResult } from '../../types';
 
 function stubAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
@@ -100,6 +100,56 @@ describe('detectTracks', () => {
     expect(infra.confidence).toBe(0);
   });
 
+  it('detects backend from Python/FastAPI', async () => {
+    const files = ['app/main.py'];
+    const contents = new Map([
+      ['app/main.py', "from fastapi import FastAPI\napp = FastAPI()\n@app.get('/health')\ndef health(): return {'ok': True}"],
+    ]);
+    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const be = tracks.find(t => t.id === 'backend')!;
+    expect(be.confidence).toBeGreaterThanOrEqual(0.3);
+  });
+
+  it('detects backend from Java/Spring', async () => {
+    const files = ['src/main/java/com/example/App.java'];
+    const contents = new Map([
+      ['src/main/java/com/example/App.java', 'import org.springframework.boot.SpringApplication;\n@SpringBootApplication\npublic class App {}'],
+    ]);
+    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const be = tracks.find(t => t.id === 'backend')!;
+    expect(be.confidence).toBeGreaterThanOrEqual(0.3);
+  });
+
+  it('detects backend from Go/Gin', async () => {
+    const files = ['cmd/server/main.go'];
+    const contents = new Map([
+      ['cmd/server/main.go', 'import "github.com/gin-gonic/gin"\nfunc main() { r := gin.Default(); r.GET("/ping", handler); r.Run() }'],
+    ]);
+    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const be = tracks.find(t => t.id === 'backend')!;
+    expect(be.confidence).toBeGreaterThanOrEqual(0.3);
+  });
+
+  it('detects backend from PHP/Laravel', async () => {
+    const files = ['app/Http/Controllers/UserController.php'];
+    const contents = new Map([
+      ['app/Http/Controllers/UserController.php', "<?php\nuse Illuminate\\Http\\Request;\nclass UserController {}"],
+    ]);
+    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const be = tracks.find(t => t.id === 'backend')!;
+    expect(be.confidence).toBeGreaterThanOrEqual(0.3);
+  });
+
+  it('detects backend from Ruby/Rails', async () => {
+    const files = ['app/controllers/users_controller.rb'];
+    const contents = new Map([
+      ['app/controllers/users_controller.rb', "require 'rails'\nclass UsersController < ApplicationController\nend"],
+    ]);
+    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const be = tracks.find(t => t.id === 'backend')!;
+    expect(be.confidence).toBeGreaterThanOrEqual(0.3);
+  });
+
   it('architecture confidence scales with module count', async () => {
     const fewModules = stubAnalysis({
       modules: [
@@ -123,5 +173,43 @@ describe('detectTracks', () => {
     const archMany = tracksMany.find(t => t.id === 'architecture')!;
 
     expect(archMany.confidence).toBeGreaterThan(archFew.confidence);
+  });
+});
+
+describe('classifyFileTrack', () => {
+  it('classifies frontend directories', () => {
+    expect(classifyFileTrack('src/components/Button.tsx')).toBe('frontend');
+    expect(classifyFileTrack('src/pages/Home.tsx')).toBe('frontend');
+    expect(classifyFileTrack('src/hooks/useAuth.ts')).toBe('frontend');
+    expect(classifyFileTrack('src/stores/counter.ts')).toBe('frontend');
+  });
+
+  it('classifies backend directories', () => {
+    expect(classifyFileTrack('src/routes/users.ts')).toBe('backend');
+    expect(classifyFileTrack('src/controllers/auth.ts')).toBe('backend');
+    expect(classifyFileTrack('src/middleware/logger.ts')).toBe('backend');
+    expect(classifyFileTrack('src/models/User.ts')).toBe('backend');
+  });
+
+  it('classifies infra directories', () => {
+    expect(classifyFileTrack('.github/workflows/ci.yml')).toBe('infra');
+    expect(classifyFileTrack('terraform/main.tf')).toBe('infra');
+    expect(classifyFileTrack('k8s/deployment.yaml')).toBe('infra');
+  });
+
+  it('classifies shared directories', () => {
+    expect(classifyFileTrack('src/shared/types.ts')).toBe('shared');
+    expect(classifyFileTrack('src/utils/helpers.ts')).toBe('shared');
+    expect(classifyFileTrack('src/lib/logger.ts')).toBe('shared');
+  });
+
+  it('returns shared for ambiguous paths', () => {
+    expect(classifyFileTrack('src/index.ts')).toBe('shared');
+    expect(classifyFileTrack('README.md')).toBe('shared');
+  });
+
+  it('handles backslash paths (Windows)', () => {
+    expect(classifyFileTrack('src\\components\\Button.tsx')).toBe('frontend');
+    expect(classifyFileTrack('src\\routes\\users.ts')).toBe('backend');
   });
 });
