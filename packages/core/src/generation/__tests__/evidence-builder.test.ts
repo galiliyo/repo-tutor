@@ -6,6 +6,9 @@ import {
   classifyTiers,
   allocateBudgets,
   readAndTruncate,
+  BUDGET_FAST,
+  BUDGET_FULL,
+  DEFAULT_BUDGET,
 } from '../evidence-builder';
 import type { Chapter, AnalysisResult, DependencyGraph, BudgetConfig, FileTier } from '../../types';
 import * as fs from 'fs/promises';
@@ -259,5 +262,35 @@ describe('EvidenceBuilder.build()', () => {
     // File exceeds 100 chars → should be truncated
     expect(pack.files[0].truncated).toBe(true);
     expect(pack.files[0].headTailTruncated).toBe(true);
+  });
+
+  it('build() accepts budget override', async () => {
+    mockedFs.readFile.mockResolvedValue('const x = 1;');
+
+    const builder = new EvidenceBuilder();
+    const result = await builder.build(
+      mkChapter({ targetFiles: ['src/a.ts'] }),
+      mkAnalysis({ repoPath: '/test' }),
+      BUDGET_FAST
+    );
+    expect(result.budgetUsed).toBeLessThanOrEqual(BUDGET_FAST.totalBudget);
+  });
+});
+
+// =============================================================================
+// Budget tiers
+// =============================================================================
+
+describe('budget tiers', () => {
+  it('BUDGET_FAST has 40K total budget', () => {
+    expect(BUDGET_FAST.totalBudget).toBe(40_000);
+  });
+
+  it('BUDGET_FULL has 80K total budget', () => {
+    expect(BUDGET_FULL.totalBudget).toBe(80_000);
+  });
+
+  it('DEFAULT_BUDGET is alias for BUDGET_FULL', () => {
+    expect(DEFAULT_BUDGET).toBe(BUDGET_FULL);
   });
 });

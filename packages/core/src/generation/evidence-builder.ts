@@ -16,13 +16,24 @@ import type {
 import { buildInterfaceArtifact } from './interface-artifact';
 import { classifyFileTrack } from '../analysis/track-detector';
 
-const DEFAULT_BUDGET: BudgetConfig = {
-  totalBudget: 120_000,
-  maxPerFile: 16_000,
+export const BUDGET_FAST: BudgetConfig = {
+  totalBudget: 40_000,
+  maxPerFile: 8_000,
+  minPerFile: 200,
+  headRatio: 0.7,
+  tierWeights: { A: 0.5, B: 0.3, C: 0.15, D: 0.05 },
+};
+
+export const BUDGET_FULL: BudgetConfig = {
+  totalBudget: 80_000,
+  maxPerFile: 12_000,
   minPerFile: 200,
   headRatio: 0.7,
   tierWeights: { A: 0.4, B: 0.3, C: 0.2, D: 0.1 },
 };
+
+// Keep DEFAULT_BUDGET as alias for backward compat
+export const DEFAULT_BUDGET = BUDGET_FULL;
 
 /**
  * Classify chapter target files into tiers based on relevance.
@@ -217,13 +228,14 @@ export class EvidenceBuilder {
     this.config = { ...DEFAULT_BUDGET, ...config };
   }
 
-  async build(chapter: Chapter, analysis: AnalysisResult): Promise<EvidencePack> {
+  async build(chapter: Chapter, analysis: AnalysisResult, budget?: BudgetConfig): Promise<EvidencePack> {
+    const config = budget ?? this.config;
     const tiered = classifyTiers(chapter, analysis.dependencyGraph);
-    const budgeted = allocateBudgets(tiered, this.config);
+    const budgeted = allocateBudgets(tiered, config);
 
     const fileResults = await Promise.all(
       budgeted.map((f) =>
-        readAndTruncate(f.path, f.budgetChars, analysis.repoPath, this.config.headRatio),
+        readAndTruncate(f.path, f.budgetChars, analysis.repoPath, config.headRatio),
       ),
     );
 
