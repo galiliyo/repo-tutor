@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      marked:
+        specifier: ^17.0.3
+        version: 17.0.3
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -63,6 +67,9 @@ importers:
       '@repo-tutor/core':
         specifier: workspace:*
         version: link:../core
+      marked:
+        specifier: ^17.0.3
+        version: 17.0.3
     devDependencies:
       '@types/vscode':
         specifier: ^1.85.0
@@ -1358,6 +1365,11 @@ packages:
 
   markdown-it@14.1.1:
     resolution: {integrity: sha512-BuU2qnTti9YKgK5N+IeMubp14ZUKUUw7yeJbkjtosvHiP0AZ5c8IAgEMk79D0eC8F23r4Ac/q8cAIFdm2FtyoA==}
+    hasBin: true
+
+  marked@17.0.3:
+    resolution: {integrity: sha512-jt1v2ObpyOKR8p4XaUJVk3YWRJ5n+i4+rjQopxvV32rSndTJXvIzuUdWWIy/1pFQMkQmvTXawzDNqOH/CUmx6A==}
+    engines: {node: '>= 20'}
     hasBin: true
 
   math-intrinsics@1.1.0:
@@ -3350,6 +3362,8 @@ snapshots:
       mdurl: 2.0.0
       punycode.js: 2.3.1
       uc.micro: 2.1.0
+
+  marked@17.0.3: {}
 
   math-intrinsics@1.1.0: {}
 

@@ -16,6 +16,7 @@ export interface LLMResponse {
  */
 export interface ILLMClient {
   complete(prompt: string, systemPrompt?: string): Promise<LLMResponse>;
+  stream?(prompt: string, systemPrompt?: string): AsyncIterable<string>;
 }
 
 export class LLMClient implements ILLMClient {
@@ -111,6 +112,67 @@ export class LLMClient implements ILLMClient {
       content: textContent?.text || '',
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
     };
+  }
+
+  async *stream(prompt: string, systemPrompt?: string): AsyncIterable<string> {
+    if (!this.config) {
+      throw new Error('LLM config not set');
+    }
+
+    this.log.info(`► Stream [${this.config.provider}/${this.config.model}]`);
+
+    try {
+      const iterable = this.config.provider === 'anthropic'
+        ? this.streamAnthropic(prompt, systemPrompt)
+        : this.streamOpenAI(prompt, systemPrompt);
+
+      for await (const chunk of iterable) {
+        yield chunk;
+      }
+    } catch (err: any) {
+      this.log.error(`✖ Stream error: ${err.message ?? err}`);
+      throw err;
+    }
+  }
+
+  private async *streamOpenAI(prompt: string, systemPrompt?: string): AsyncIterable<string> {
+    if (!this.openai || !this.config) throw new Error('OpenAI not configured');
+
+    const messages: OpenAI.ChatCompletionMessageParam[] = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
+    const stream = await this.openai.chat.completions.create({
+      model: this.config.model,
+      messages,
+      max_tokens: this.config.maxTokens || 8192,
+      temperature: this.config.temperature || 0.7,
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) yield delta;
+    }
+  }
+
+  private async *streamAnthropic(prompt: string, systemPrompt?: string): AsyncIterable<string> {
+    if (!this.anthropic || !this.config) throw new Error('Anthropic not configured');
+
+    const stream = this.anthropic.messages.stream({
+      model: this.config.model,
+      max_tokens: this.config.maxTokens || 8192,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        yield event.delta.text;
+      }
+    }
   }
 
   async validateApiKey(): Promise<boolean> {

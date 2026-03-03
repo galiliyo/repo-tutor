@@ -14,7 +14,9 @@
   "activationEvents": [
     "onStartupFinished"
   ],
-  "extensionKind": ["workspace"],
+  "extensionKind": [
+    "workspace"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -128,7 +130,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@repo-tutor/core": "workspace:*"
+    "@repo-tutor/core": "workspace:*",
+    "marked": "^17.0.3"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",

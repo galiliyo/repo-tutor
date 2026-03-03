@@ -50,6 +50,29 @@ export class QuizEvaluator {
     };
   }
 
+  async *streamExplanation(
+    question: Question,
+    userAnswer: string,
+    evaluation: Evaluation
+  ): AsyncIterable<string> {
+    if (!this.llmClient.stream) return;
+
+    const prompt = [
+      `The student answered a quiz question. Provide a detailed pedagogical walkthrough.`,
+      ``,
+      `Question: ${question.question}`,
+      `Student's answer: ${userAnswer}`,
+      `Correct answer: ${question.correctAnswer}`,
+      `Result: ${evaluation.isCorrect ? 'Correct' : 'Incorrect'} (score: ${evaluation.score}/100)`,
+      evaluation.feedback ? `Feedback: ${evaluation.feedback}` : '',
+      ``,
+      `Give a clear, educational explanation of why the answer is ${evaluation.isCorrect ? 'correct' : 'incorrect'}.`,
+      `Reference the relevant code concepts. Keep it concise but thorough.`,
+    ].filter(Boolean).join('\n');
+
+    yield* this.llmClient.stream(prompt);
+  }
+
   private parseJSON(content: string): LLMEvaluationResponse {
     let jsonStr = content.trim();
     if (jsonStr.startsWith('```')) {
