@@ -168,6 +168,7 @@ export class LearningPanel {
         : [],
       currentTrackId: this._session.currentTrackId || null,
     });
+    this._sendChapterStates();
   }
 
   private async _handleMessage(message: WebviewToExtensionMessage) {
@@ -214,6 +215,21 @@ export class LearningPanel {
 
       case 'openFile':
         await this._openFile(message.file, message.line);
+        break;
+
+      case 'track:switched':
+        this._prefetchAbortController?.abort();
+        this._prefetchAbortController = new AbortController();
+        this._session.currentTrackId = message.trackId;
+        // Rebuild queue for new track
+        this._prefetchQueue = this._session.chapters
+          .filter(c => c.trackId === message.trackId)
+          .sort((a, b) => a.order - b.order)
+          .map(c => c.id)
+          .filter(id => !this._generatedContent.has(id));
+        this._prefetching = false;
+        this._runPrefetchQueue();
+        this._sendChapterStates();
         break;
     }
   }
@@ -345,6 +361,7 @@ export class LearningPanel {
         const nextId = this._prefetchQueue.shift()!;
         if (this._generatedContent.has(nextId)) continue;
         await this._prefetchChapter(nextId);
+        this._sendChapterStates();
         // Notify webview of progress
         const total = this._session.chapters.filter(
           c => c.trackId === this._session.currentTrackId
@@ -493,6 +510,27 @@ export class LearningPanel {
     } catch (error) {
       vscode.window.showErrorMessage(`Could not open file: ${file}`);
     }
+  }
+
+  private _buildChapterStates(): Record<string, 'ready' | 'loading' | 'queued'> {
+    const states: Record<string, 'ready' | 'loading' | 'queued'> = {};
+    const trackChapters = this._session.chapters.filter(
+      c => c.trackId === this._session.currentTrackId
+    );
+    for (const ch of trackChapters) {
+      if (this._generatedContent.has(ch.id)) {
+        states[ch.id] = 'ready';
+      } else if (this._inflight.has(ch.id)) {
+        states[ch.id] = 'loading';
+      } else {
+        states[ch.id] = 'queued';
+      }
+    }
+    return states;
+  }
+
+  private _sendChapterStates(): void {
+    this._postMessage({ type: 'chapter:states', states: this._buildChapterStates() });
   }
 
   private _postMessage(message: ExtensionToWebviewMessage): void {
