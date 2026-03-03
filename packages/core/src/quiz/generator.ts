@@ -57,12 +57,33 @@ export class QuizGenerator {
     this.validateQuestions = this.ajv.compile(questionsArraySchema);
   }
 
-  async generate(chapter: ChapterContent): Promise<Question[]> {
+  async generate(chapter: ChapterContent, existingQuestions?: Question[]): Promise<Question[]> {
+    // Build summary from actual section content
+    const chapterSummary = chapter.sections
+      .map(s => `## ${s.heading}\n${s.content}`)
+      .join('\n\n');
+
+    // Extract code refs from all sections
+    const keyCodeRefs = chapter.sections
+      .flatMap(s => (s.codeReferences || []).map(ref => ({
+        file: ref.file,
+        line: ref.startLine || '',
+        description: ref.file + (ref.startLine ? ':' + ref.startLine : ''),
+      })));
+
+    // Use section headings as learning objectives if not explicitly set
+    const learningObjectives = chapter.keyTakeaways && chapter.keyTakeaways.length > 0
+      ? chapter.keyTakeaways
+      : chapter.sections.map(s => s.heading);
+
     const prompt = this.promptLoader.load('quiz-generator', {
       chapterId: chapter.chapterId,
       chapterTitle: chapter.title,
-      sections: chapter.sections,
-      keyTakeaways: chapter.keyTakeaways,
+      chapterSummary,
+      learningObjectives,
+      keyCodeRefs,
+      patternsReferenced: chapter.patternsReferenced || [],
+      existingQuestions: existingQuestions?.map(q => q.question) || [],
     });
 
     const response = await this.llmClient.complete(prompt);

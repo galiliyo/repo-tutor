@@ -126,8 +126,8 @@ describe('QuizGenerator', () => {
       expect.objectContaining({
         chapterId: 'ch-1',
         chapterTitle: 'Introduction to the Codebase',
-        sections: chapter.sections,
-        keyTakeaways: chapter.keyTakeaways,
+        chapterSummary: expect.any(String),
+        learningObjectives: expect.any(Array),
       })
     );
   });

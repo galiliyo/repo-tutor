@@ -30,6 +30,15 @@ For free-text questions, provide:
 - Key points the answer should cover (for evaluator)
 - Rubric hints: what distinguishes partial from full credit
 
+## Question Relevance — CRITICAL
+
+Questions MUST be directly grounded in the chapter content above. Follow this mix:
+
+- **At least 2 direct questions**: Ask about specific concepts, patterns, functions, or code that was explicitly discussed in the chapter. The learner should be able to answer these from reading the chapter alone.
+- **1-2 extrapolation questions**: Build on the chapter content but require the learner to apply, extend, or reason beyond what was explicitly stated (e.g., "what would happen if..." or "how would you modify...").
+
+Do NOT generate generic CS/programming questions that happen to share a topic. Every question must reference something concrete from the chapter.
+
 ## Question Quality
 
 - Avoid trivial questions (not just "what is the filename")
@@ -60,9 +69,16 @@ Patterns covered:
 - {{name}}: {{description}}
 {{/each}}
 
+{{#if existingQuestions.length}}
+Already asked (do NOT repeat or rephrase these):
+{{#each existingQuestions}}
+- {{this}}
+{{/each}}
+{{/if}}
+
 # Task
 
-Generate 3-5 questions that test understanding of this chapter's objectives.
+Generate 3-5 questions that test understanding of this chapter's objectives. Questions must be directly grounded in the chapter content provided above.
 
 # Output Format
 

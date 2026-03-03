@@ -23,6 +23,7 @@ type WebviewToExtensionMessage =
   | { type: 'chapter:request'; chapterId: string }
   | { type: 'quiz:start'; chapterId: string }
   | { type: 'quiz:submit'; questionId: string; answer: string }
+  | { type: 'quiz:more'; chapterId: string }
   | { type: 'question:ask'; question: string }
   | { type: 'navigate'; chapterId: string }
   | { type: 'openFile'; file: string; line?: number };
@@ -114,6 +115,10 @@ export class LearningPanel {
         await this._submitAnswer(message.questionId, message.answer);
         break;
 
+      case 'quiz:more':
+        await this._generateMoreQuestions(message.chapterId);
+        break;
+
       case 'question:ask':
         await this._askQuestion(message.question);
         break;
@@ -173,6 +178,31 @@ export class LearningPanel {
       this._postMessage({ type: 'quiz:loaded', questions });
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to generate quiz: ${error}`);
+    }
+  }
+
+  private async _generateMoreQuestions(chapterId: string) {
+    this._postMessage({ type: 'quiz:loading', chapterId });
+
+    try {
+      const content = this._generatedContent.get(chapterId);
+      if (!content) {
+        throw new Error('Load chapter content first');
+      }
+
+      const core = getCoreAdapter();
+      const newQuestions = await core.generateQuiz(content, this._currentQuestions);
+
+      // Append and send full list
+      this._currentQuestions = [...this._currentQuestions, ...newQuestions];
+      const cached = this._generatedQuizzes.get(chapterId);
+      if (cached) {
+        this._generatedQuizzes.set(chapterId, this._currentQuestions);
+      }
+
+      this._postMessage({ type: 'quiz:loaded', questions: this._currentQuestions });
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to generate more questions: ${error}`);
     }
   }
 
@@ -367,6 +397,34 @@ export class LearningPanel {
     .section p {
       line-height: 1.6;
     }
+    .section pre {
+      background: var(--vscode-textCodeBlock-background);
+      padding: 12px 16px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    .section pre code {
+      font-family: var(--vscode-editor-font-family);
+      font-size: 0.9em;
+      background: none;
+      padding: 0;
+    }
+    .section code {
+      background: var(--vscode-textCodeBlock-background);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: var(--vscode-editor-font-family);
+      font-size: 0.9em;
+    }
+    .section ul {
+      padding-left: 20px;
+      margin: 8px 0;
+    }
+    .section li {
+      line-height: 1.6;
+      margin-bottom: 4px;
+    }
     .code-ref {
       display: inline-flex;
       align-items: center;
@@ -467,6 +525,13 @@ export class LearningPanel {
     .btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+    .btn-secondary:hover {
+      background: var(--vscode-button-secondaryHoverBackground);
     }
     .feedback {
       margin-top: 16px;
@@ -607,11 +672,46 @@ export class LearningPanel {
     }
 
     function formatContent(content) {
-      // Simple text formatting - escape HTML first, then apply formatting
-      const escaped = escapeHtml(content);
-      return escaped
-        .replace(/\\n\\n/g, '</p><p>')
+      // Split into blocks: fenced code blocks vs everything else
+      const blocks = content.split(/(\`\`\`[\\s\\S]*?\`\`\`)/g);
+      return blocks.map(block => {
+        if (block.startsWith('\`\`\`')) {
+          // Fenced code block — extract lang and code
+          const match = block.match(/^\`\`\`(\\w*)\\n?([\\s\\S]*?)\\n?\`\`\`$/);
+          const code = match ? escapeHtml(match[2]) : escapeHtml(block.slice(3, -3));
+          return '<pre><code>' + code + '</code></pre>';
+        }
+        // Regular content — escape then apply inline formatting
+        const escaped = escapeHtml(block);
+        const lines = escaped.split('\\n');
+        const out = [];
+        let inList = false;
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const listMatch = line.match(/^\\s*[-*]\\s+(.*)/);
+
+          if (listMatch) {
+            if (!inList) { out.push('<ul>'); inList = true; }
+            out.push('<li>' + inlineFmt(listMatch[1]) + '</li>');
+          } else {
+            if (inList) { out.push('</ul>'); inList = false; }
+            if (line.trim() === '') {
+              out.push('</p><p>');
+            } else {
+              out.push(inlineFmt(line));
+            }
+          }
+        }
+        if (inList) out.push('</ul>');
+        return out.join('\\n');
+      }).join('');
+    }
+
+    function inlineFmt(text) {
+      return text
         .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+        .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
         .replace(/\`(.+?)\`/g, '<code>$1</code>');
     }
 
@@ -796,10 +896,17 @@ export class LearningPanel {
     }
 
     function renderQuiz(questions) {
-      state.questions = questions;
-      state.currentQuestionIndex = 0;
-      state.answers = {};
-      state.evaluations = {};
+      const prevCount = state.questions.length;
+      // Preserve existing answers/evaluations when appending
+      if (prevCount > 0 && questions.length > prevCount) {
+        state.questions = questions;
+        state.currentQuestionIndex = prevCount; // jump to first new question
+      } else {
+        state.questions = questions;
+        state.currentQuestionIndex = 0;
+        state.answers = {};
+        state.evaluations = {};
+      }
       renderCurrentQuestion();
     }
 
@@ -890,16 +997,15 @@ export class LearningPanel {
         strong.textContent = evaluation.isCorrect ? '✓ Correct!' : '✗ Not quite';
         feedbackDiv.appendChild(strong);
 
-        const feedbackP = document.createElement('p');
-        feedbackP.textContent = evaluation.feedback;
+        const feedbackP = document.createElement('div');
+        feedbackP.innerHTML = formatContent(evaluation.feedback);
         feedbackDiv.appendChild(feedbackP);
 
         if (evaluation.explanation) {
-          const explainP = document.createElement('p');
-          const em = document.createElement('em');
-          em.textContent = evaluation.explanation;
-          explainP.appendChild(em);
-          feedbackDiv.appendChild(explainP);
+          const explainDiv = document.createElement('div');
+          explainDiv.style.fontStyle = 'italic';
+          explainDiv.innerHTML = formatContent(evaluation.explanation);
+          feedbackDiv.appendChild(explainDiv);
         }
 
         questionDiv.appendChild(feedbackDiv);
@@ -935,6 +1041,20 @@ export class LearningPanel {
       }
 
       questionDiv.appendChild(navDiv);
+
+      // "Another Question" button — always visible
+      const moreBtn = document.createElement('button');
+      moreBtn.className = 'btn btn-secondary';
+      moreBtn.id = 'moreQBtn';
+      moreBtn.textContent = 'Another Question';
+      moreBtn.style.marginTop = '12px';
+      moreBtn.addEventListener('click', () => {
+        if (state.currentChapterId) {
+          vscode.postMessage({ type: 'quiz:more', chapterId: state.currentChapterId });
+        }
+      });
+      questionDiv.appendChild(moreBtn);
+
       quizContent.appendChild(questionDiv);
     }
 

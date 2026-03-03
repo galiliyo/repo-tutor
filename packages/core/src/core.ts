@@ -131,9 +131,9 @@ export class RepoTutorCore {
   /**
    * Generate quiz questions for a chapter.
    */
-  async generateQuiz(chapter: ChapterContent): Promise<Question[]> {
+  async generateQuiz(chapter: ChapterContent, existingQuestions?: Question[]): Promise<Question[]> {
     this.ensureLLMConfigured();
-    return this.quizGenerator!.generate(chapter);
+    return this.quizGenerator!.generate(chapter, existingQuestions);
   }
 
   /**
