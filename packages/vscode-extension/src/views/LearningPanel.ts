@@ -63,7 +63,9 @@ type ExtensionToWebviewMessage =
   | { type: 'question:answering' }
   | { type: 'question:answered'; answer: Answer }
   | { type: 'chapter:skeleton'; chapterId: string; skeleton: ChapterSkeleton }
-  | { type: 'prefetch:progress'; done: number; total: number };
+  | { type: 'prefetch:progress'; done: number; total: number }
+  | { type: 'init:analyzing'; repoPath: string }
+  | { type: 'init:planning'; trackCount: number };
 
 type WebviewToExtensionMessage =
   | { type: 'ready' }
@@ -140,19 +142,47 @@ export class LearningPanel {
     this._postMessage({ type: 'chapter:request', chapterId } as unknown as ExtensionToWebviewMessage);
   }
 
+  public postAnalyzing(repoPath: string): void {
+    this._postMessage({ type: 'init:analyzing', repoPath });
+  }
+
+  public updateSession(session: SessionState): void {
+    this._session = session;
+  }
+
+  public postPlanning(trackCount: number): void {
+    this._postMessage({ type: 'init:planning', trackCount });
+  }
+
+  public sendInit(): void {
+    this._postMessage({
+      type: 'init',
+      chapters: this._session.chapters,
+      currentChapterId: this._session.currentChapterId,
+      tracks: this._session.selectedTrackIds
+        ? (this._session.detectedTracks || []).filter(t =>
+            this._session.selectedTrackIds!.includes(t.id))
+        : [],
+      currentTrackId: this._session.currentTrackId || null,
+    });
+  }
+
   private async _handleMessage(message: WebviewToExtensionMessage) {
     switch (message.type) {
       case 'ready':
-        this._postMessage({
-          type: 'init',
-          chapters: this._session.chapters,
-          currentChapterId: this._session.currentChapterId,
-          tracks: this._session.selectedTrackIds
-            ? (this._session.detectedTracks || []).filter(t =>
-                this._session.selectedTrackIds!.includes(t.id))
-            : [],
-          currentTrackId: this._session.currentTrackId || null,
-        });
+        // Skip init when chapters are empty (panel opened early in analyzing state)
+        if (this._session.chapters.length > 0) {
+          this._postMessage({
+            type: 'init',
+            chapters: this._session.chapters,
+            currentChapterId: this._session.currentChapterId,
+            tracks: this._session.selectedTrackIds
+              ? (this._session.detectedTracks || []).filter(t =>
+                  this._session.selectedTrackIds!.includes(t.id))
+              : [],
+            currentTrackId: this._session.currentTrackId || null,
+          });
+        }
         break;
 
       case 'chapter:request':
@@ -1468,6 +1498,33 @@ export class LearningPanel {
             indicator.remove();
           } else {
             indicator.textContent = 'Preparing chapters... ' + message.done + '/' + message.total;
+          }
+          break;
+
+        case 'init:analyzing':
+          mainContentEl.replaceChildren();
+          var analyzeDiv = document.createElement('div');
+          analyzeDiv.className = 'loading';
+          analyzeDiv.id = 'analyzePhase';
+          var analyzeSpinner = document.createElement('div');
+          analyzeSpinner.className = 'loading-spinner';
+          analyzeDiv.appendChild(analyzeSpinner);
+          var analyzeH2 = document.createElement('h2');
+          analyzeH2.textContent = 'Scanning repository...';
+          analyzeH2.style.margin = '16px 0 8px';
+          analyzeDiv.appendChild(analyzeH2);
+          var analyzeP = document.createElement('p');
+          analyzeP.textContent = message.repoPath;
+          analyzeP.style.opacity = '0.7';
+          analyzeDiv.appendChild(analyzeP);
+          mainContentEl.appendChild(analyzeDiv);
+          break;
+
+        case 'init:planning':
+          var phaseEl = document.getElementById('analyzePhase');
+          if (phaseEl) {
+            var h2 = phaseEl.querySelector('h2');
+            if (h2) h2.textContent = 'Planning ' + message.trackCount + ' track(s)...';
           }
           break;
 

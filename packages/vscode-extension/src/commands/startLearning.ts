@@ -5,7 +5,7 @@ import type { Track } from '@repo-tutor/core';
 import { getCoreAdapter, getDefaultUserContext } from '../core-adapter';
 import { getSettings, getApiKey, hasApiKey } from '../settings';
 import { getProvider } from '../providers/registry';
-import { SecurityConfigPanel, LearningPanel } from '../views';
+import { SecurityConfigPanel, LearningPanel, type SessionState } from '../views';
 import { configureApiKeyCommand } from './configureApiKey';
 import { getChaptersTreeProvider } from '../extension';
 
@@ -74,31 +74,40 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
     return;
   }
 
-  // Step 1: Analyze with progress
   const core = getCoreAdapter();
   const userContext = getDefaultUserContext();
 
+  // Open panel early with empty session for progressive UI
+  const earlySession: SessionState = {
+    repoPath,
+    analysisResult: { repoPath, languages: [], entryPoints: [], dependencyGraph: { nodes: [], edges: [] }, modules: [], patterns: [], analyzedAt: '' },
+    chapters: [],
+    securityConfig: securityResult.config!,
+    userContext,
+    currentChapterId: null,
+    currentTrackId: null,
+    progress: {},
+    startedAt: new Date().toISOString(),
+    detectedTracks: [],
+    selectedTrackIds: [],
+  };
+
+  const panel = LearningPanel.show(context.extensionUri, earlySession);
+  panel.postAnalyzing(repoPath);
+
+  // Step 1: Analyze
   let analysisResult: Awaited<ReturnType<typeof core.analyze>> | undefined;
 
   try {
-    analysisResult = await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: 'Repo Tutor',
-        cancellable: false,
-      },
-      async (progress) => {
-        progress.report({ message: 'Analyzing codebase...', increment: 0 });
-        return core.analyze(repoPath, securityResult.config!);
-      }
-    );
+    analysisResult = await core.analyze(repoPath, securityResult.config!);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     vscode.window.showErrorMessage(`Analysis failed: ${message}`);
+    panel.dispose();
     return;
   }
 
-  // Step 2: Track selection QuickPick (outside progress)
+  // Step 2: Track selection QuickPick (panel stays open behind it)
   const detectedTracks: Track[] = analysisResult.detectedTracks || [];
 
   const trackItems = detectedTracks
@@ -119,73 +128,63 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
 
   if (!selectedItems || selectedItems.length === 0) {
     vscode.window.showInformationMessage('No tracks selected, session cancelled');
+    panel.dispose();
     return;
   }
 
   const selectedTracks = selectedItems.map(item => item.track);
 
-  // Step 3: Plan chapters per track with progress
+  // Step 3: Plan chapters per track (panel shows "Planning N track(s)...")
+  panel.postPlanning(selectedTracks.length);
+
   try {
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: 'Repo Tutor',
-        cancellable: false,
-      },
-      async (progress) => {
-        progress.report({ message: 'Planning chapters...', increment: 50 });
-
-        const results = await Promise.all(
-          selectedTracks.map(async (track) => {
-            const chapters = await core.planChapters(analysisResult!, userContext, track);
-            chapters.forEach(ch => { ch.trackId = track.id; });
-            return chapters;
-          })
-        );
-        const allChapters = results.flat();
-
-        progress.report({ message: 'Opening tutorial...', increment: 90 });
-
-        // Store session state via tree provider
-        const session = {
-          repoPath,
-          analysisResult: analysisResult!,
-          chapters: allChapters,
-          securityConfig: securityResult.config,
-          userContext,
-          currentChapterId: allChapters.length > 0 ? allChapters[0].id : null,
-          currentTrackId: selectedTracks.length > 0 ? selectedTracks[0].id : null,
-          progress: {},
-          startedAt: new Date().toISOString(),
-          detectedTracks: detectedTracks,
-          selectedTrackIds: selectedTracks.map(t => t.id),
-        };
-
-        const treeProvider = getChaptersTreeProvider();
-        treeProvider.setSession(session);
-
-        // Show success and refresh chapters view
-        vscode.window.showInformationMessage(
-          `Found ${allChapters.length} chapters across ${selectedTracks.length} track(s)`
-        );
-
-        // Reveal the chapters sidebar
-        vscode.commands.executeCommand('repo-tutor.chapters.focus');
-
-        // Open learning panel with first chapter
-        if (allChapters.length > 0) {
-          const panel = LearningPanel.show(context.extensionUri, session);
-          panel.loadChapter(allChapters[0].id);
-
-          // Start background prefetching for current track's chapters
-          const currentTrackChapters = allChapters
-            .filter(c => c.trackId === selectedTracks[0].id)
-            .sort((a, b) => a.order - b.order)
-            .map(c => c.id);
-          panel.startPrefetchQueue(currentTrackChapters);
-        }
-      }
+    const results = await Promise.all(
+      selectedTracks.map(async (track) => {
+        const chapters = await core.planChapters(analysisResult!, userContext, track);
+        chapters.forEach(ch => { ch.trackId = track.id; });
+        return chapters;
+      })
     );
+    const allChapters = results.flat();
+
+    // Build final session
+    const session: SessionState = {
+      repoPath,
+      analysisResult: analysisResult!,
+      chapters: allChapters,
+      securityConfig: securityResult.config!,
+      userContext,
+      currentChapterId: allChapters.length > 0 ? allChapters[0].id : null,
+      currentTrackId: selectedTracks.length > 0 ? selectedTracks[0].id : null,
+      progress: {},
+      startedAt: new Date().toISOString(),
+      detectedTracks: detectedTracks,
+      selectedTrackIds: selectedTracks.map(t => t.id),
+    };
+
+    // Update panel and tree with final session
+    panel.updateSession(session);
+    const treeProvider = getChaptersTreeProvider();
+    treeProvider.setSession(session);
+
+    vscode.window.showInformationMessage(
+      `Found ${allChapters.length} chapters across ${selectedTracks.length} track(s)`
+    );
+
+    vscode.commands.executeCommand('repo-tutor.chapters.focus');
+
+    // Send init to webview now that we have chapters, then load first
+    if (allChapters.length > 0) {
+      panel.sendInit();
+      panel.loadChapter(allChapters[0].id);
+
+      // Start background prefetching for current track's chapters
+      const currentTrackChapters = allChapters
+        .filter(c => c.trackId === selectedTracks[0].id)
+        .sort((a, b) => a.order - b.order)
+        .map(c => c.id);
+      panel.startPrefetchQueue(currentTrackChapters);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     vscode.window.showErrorMessage(`Planning failed: ${message}`);

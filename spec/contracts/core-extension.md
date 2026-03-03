@@ -113,7 +113,9 @@ type ExtensionToWebviewMessage =
   | { type: 'tracks:detected'; tracks: Track[] }
   | { type: 'progress:updated'; progress: SessionProgress }
   | { type: 'chapter:skeleton'; chapterId: string; skeleton: ChapterSkeleton }
-  | { type: 'prefetch:progress'; done: number; total: number };
+  | { type: 'prefetch:progress'; done: number; total: number }
+  | { type: 'init:analyzing'; repoPath: string }
+  | { type: 'init:planning'; trackCount: number };
 ```
 
 ### Webview → Extension
