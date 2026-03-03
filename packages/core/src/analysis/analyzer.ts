@@ -6,6 +6,7 @@ import type { AnalysisResult, SecurityConfig } from '../types';
 import { LanguageRegistry, JavaScriptPlugin } from '../languages';
 import { buildDependencyGraph, type FileImports } from './dependency-graph';
 import { detectEntryPoints } from './entry-points';
+import { detectTracks } from './track-detector';
 
 export class Analyzer {
   private registry: LanguageRegistry;
@@ -65,7 +66,7 @@ export class Analyzer {
     // Detect modules (simplified - group by top-level directory)
     const modules = this.detectModules(files);
 
-    return {
+    const result: AnalysisResult = {
       repoPath: absolutePath,
       languages: Array.from(languages),
       entryPoints,
@@ -74,6 +75,10 @@ export class Analyzer {
       patterns: [],
       analyzedAt: new Date().toISOString(),
     };
+
+    result.detectedTracks = await detectTracks(absolutePath, files, result);
+
+    return result;
   }
 
   private detectModules(files: string[]) {
