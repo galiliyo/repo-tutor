@@ -11,6 +11,7 @@ import type {
   FileTier,
   TieredFile,
   BudgetConfig,
+  TrackId,
 } from '../types';
 import { buildInterfaceArtifact } from './interface-artifact';
 import { classifyFileTrack } from '../analysis/track-detector';
@@ -254,7 +255,7 @@ export class EvidenceBuilder {
         stateManagement: trackId === 'backend' ? undefined : analysis.stateManagement,
       };
     }
-    const interfaceArtifact = buildInterfaceArtifact(filteredAnalysis);
+    const interfaceArtifact = buildInterfaceArtifact(filteredAnalysis, chapter.trackId as TrackId | undefined);
 
     return {
       chapterId: chapter.id,

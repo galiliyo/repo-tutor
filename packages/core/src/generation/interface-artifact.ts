@@ -1,6 +1,6 @@
 // packages/core/src/generation/interface-artifact.ts
 
-import type { AnalysisResult, InterfaceArtifact, TrackSummary, ModuleMapEntry } from '../types';
+import type { AnalysisResult, InterfaceArtifact, TrackSummary, ModuleMapEntry, TrackId } from '../types';
 import {
   FE_FRAMEWORK_IMPORTS,
   BE_FRAMEWORK_IMPORTS,
@@ -11,12 +11,12 @@ import {
  * Build an InterfaceArtifact from an AnalysisResult.
  * No I/O — purely derives structural metadata from already-analyzed data.
  */
-export function buildInterfaceArtifact(analysis: AnalysisResult): InterfaceArtifact {
+export function buildInterfaceArtifact(analysis: AnalysisResult, trackId?: TrackId): InterfaceArtifact {
   return {
     directoryTree: buildDirectoryTree(analysis),
     tracks: buildTrackSummaries(analysis),
     entryPoints: (analysis.entryPoints || []).map((e) => e.path),
-    frameworkStack: extractFrameworkStack(analysis),
+    frameworkStack: extractFrameworkStack(analysis, trackId),
     moduleMap: buildModuleMap(analysis),
   };
 }
@@ -78,9 +78,17 @@ function buildTrackSummaries(analysis: AnalysisResult): TrackSummary[] {
   }));
 }
 
-function extractFrameworkStack(analysis: AnalysisResult): string[] {
+function extractFrameworkStack(analysis: AnalysisResult, trackId?: TrackId): string[] {
   const stack: string[] = [];
-  const allKnown = [...FE_FRAMEWORK_IMPORTS, ...BE_FRAMEWORK_IMPORTS, ...BE_DB_IMPORTS];
+  let knownFrameworks: string[];
+  if (trackId === 'frontend') {
+    knownFrameworks = [...FE_FRAMEWORK_IMPORTS];
+  } else if (trackId === 'backend') {
+    knownFrameworks = [...BE_FRAMEWORK_IMPORTS, ...BE_DB_IMPORTS];
+  } else {
+    // architecture, infra, or no track — include all
+    knownFrameworks = [...FE_FRAMEWORK_IMPORTS, ...BE_FRAMEWORK_IMPORTS, ...BE_DB_IMPORTS];
+  }
 
   // Check dependency graph nodes for framework-related paths
   const allPaths = (analysis.dependencyGraph?.nodes || []).map((n) => n.path);
@@ -88,7 +96,7 @@ function extractFrameworkStack(analysis: AnalysisResult): string[] {
   // Check modules for framework-sounding names
   for (const mod of analysis.modules || []) {
     const modName = mod.name.toLowerCase();
-    for (const fw of allKnown) {
+    for (const fw of knownFrameworks) {
       if (modName.includes(fw) && !stack.includes(fw)) {
         stack.push(fw);
       }
@@ -103,7 +111,7 @@ function extractFrameworkStack(analysis: AnalysisResult): string[] {
   // Scan file paths for common framework patterns
   for (const p of allPaths) {
     const lower = p.toLowerCase();
-    for (const fw of allKnown) {
+    for (const fw of knownFrameworks) {
       if (lower.includes(`node_modules/${fw}`) || lower.includes(`${fw}.config`)) {
         if (!stack.includes(fw)) stack.push(fw);
       }

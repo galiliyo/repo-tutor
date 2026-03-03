@@ -103,4 +103,67 @@ describe('buildInterfaceArtifact', () => {
     const artifact = buildInterfaceArtifact(mkAnalysis({ detectedTracks: undefined }));
     expect(artifact.tracks).toEqual([]);
   });
+
+  it('filters framework stack for backend track', () => {
+    const analysis = mkAnalysis({
+      http: { framework: 'express', routes: [], middleware: [] },
+      dependencyGraph: {
+        nodes: [
+          { path: 'node_modules/react/index.js' },
+          { path: 'node_modules/express/index.js' },
+        ],
+        edges: [],
+      },
+    });
+
+    const artifact = buildInterfaceArtifact(analysis, 'backend');
+    expect(artifact.frameworkStack).toContain('express');
+    expect(artifact.frameworkStack).not.toContain('react');
+  });
+
+  it('filters framework stack for frontend track', () => {
+    const analysis = mkAnalysis({
+      modules: [{ name: 'react-app', path: 'src', fileCount: 5 }],
+      dependencyGraph: {
+        nodes: [
+          { path: 'node_modules/react/index.js' },
+          { path: 'node_modules/express/index.js' },
+        ],
+        edges: [],
+      },
+    });
+
+    const artifact = buildInterfaceArtifact(analysis, 'frontend');
+    expect(artifact.frameworkStack).toContain('react');
+    expect(artifact.frameworkStack).not.toContain('express');
+  });
+
+  it('includes all frameworks for architecture track', () => {
+    const analysis = mkAnalysis({
+      http: { framework: 'express', routes: [], middleware: [] },
+      modules: [{ name: 'react-app', path: 'src', fileCount: 5 }],
+      dependencyGraph: {
+        nodes: [
+          { path: 'node_modules/react/index.js' },
+          { path: 'node_modules/express/index.js' },
+        ],
+        edges: [],
+      },
+    });
+
+    const artifact = buildInterfaceArtifact(analysis, 'architecture');
+    expect(artifact.frameworkStack).toContain('express');
+    expect(artifact.frameworkStack).toContain('react');
+  });
+
+  it('includes all frameworks when no trackId', () => {
+    const analysis = mkAnalysis({
+      http: { framework: 'express', routes: [], middleware: [] },
+      modules: [{ name: 'react-app', path: 'src', fileCount: 5 }],
+    });
+
+    const artifact = buildInterfaceArtifact(analysis);
+    // Should include express (from http.framework) at minimum
+    expect(artifact.frameworkStack).toContain('express');
+  });
 });
