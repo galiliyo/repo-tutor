@@ -135,12 +135,14 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
       async (progress) => {
         progress.report({ message: 'Planning chapters...', increment: 50 });
 
-        const allChapters: Awaited<ReturnType<typeof core.planChapters>> = [];
-        for (const track of selectedTracks) {
-          const trackChapters = await core.planChapters(analysisResult!, userContext, track);
-          trackChapters.forEach(ch => { ch.trackId = track.id; });
-          allChapters.push(...trackChapters);
-        }
+        const results = await Promise.all(
+          selectedTracks.map(async (track) => {
+            const chapters = await core.planChapters(analysisResult!, userContext, track);
+            chapters.forEach(ch => { ch.trackId = track.id; });
+            return chapters;
+          })
+        );
+        const allChapters = results.flat();
 
         progress.report({ message: 'Opening tutorial...', increment: 90 });
 
