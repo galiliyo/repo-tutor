@@ -15,6 +15,7 @@ import type {
   QuestionContext,
   Logger,
 } from './types';
+import type { Track } from './types/track';
 import { Analyzer } from './analysis';
 import {
   LLMClient,
@@ -98,9 +99,13 @@ export class RepoTutorCore {
    * Plan the chapters for learning a codebase.
    * Requires LLM to be configured via setLLMConfig.
    */
-  async planChapters(analysis: AnalysisResult, userContext: UserContext): Promise<Chapter[]> {
+  async planChapters(
+    analysis: AnalysisResult,
+    userContext: UserContext,
+    track?: Track,
+  ): Promise<Chapter[]> {
     this.ensureLLMConfigured();
-    return this.planner!.plan(analysis, userContext);
+    return this.planner!.plan(analysis, userContext, track);
   }
 
   /**
@@ -142,6 +147,15 @@ export class RepoTutorCore {
   async evaluateAnswer(question: Question, userAnswer: string): Promise<Evaluation> {
     this.ensureLLMConfigured();
     return this.quizEvaluator!.evaluate(question, userAnswer);
+  }
+
+  async *streamEvaluationExplanation(
+    question: Question,
+    userAnswer: string,
+    evaluation: Evaluation
+  ): AsyncIterable<string> {
+    this.ensureLLMConfigured();
+    yield* this.quizEvaluator!.streamExplanation(question, userAnswer, evaluation);
   }
 
   async answerQuestion(question: string, context: QuestionContext): Promise<Answer> {

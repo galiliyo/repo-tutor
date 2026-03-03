@@ -1,6 +1,7 @@
 // packages/core/src/generation/planner.ts
 
 import type { AnalysisResult, Chapter, UserContext } from '../types';
+import type { Track } from '../types/track';
 import type { ILLMClient } from './llm-client';
 import type { IPromptLoader } from './prompt-loader';
 
@@ -10,7 +11,11 @@ export class Planner {
     private promptLoader: IPromptLoader
   ) {}
 
-  async plan(analysis: AnalysisResult, userContext: UserContext): Promise<Chapter[]> {
+  async plan(
+    analysis: AnalysisResult,
+    userContext: UserContext,
+    track?: Track,
+  ): Promise<Chapter[]> {
     // Render planner prompt with analysis data
     const prompt = this.promptLoader.load('planner', {
       userPreferredLanguage: userContext.preferredLanguage,
@@ -22,6 +27,10 @@ export class Planner {
       stateManagement: analysis.stateManagement || { type: 'none' },
       modules: analysis.modules,
       dependencyLayers: this.formatLayers(analysis.dependencyGraph.layers),
+      trackId: track?.id,
+      trackLabel: track?.label,
+      trackDescription: track?.description,
+      trackFocusTypes: track?.focusTypes.join(', '),
     });
 
     // Call LLM

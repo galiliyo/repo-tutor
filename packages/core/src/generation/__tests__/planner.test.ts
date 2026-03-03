@@ -5,6 +5,7 @@ import { Planner } from '../planner';
 import type { ILLMClient, LLMResponse } from '../llm-client';
 import type { IPromptLoader } from '../prompt-loader';
 import type { AnalysisResult, UserContext } from '../../types';
+import type { Track } from '../../types/track';
 
 describe('Planner', () => {
   const createMockAnalysis = (): AnalysisResult => ({
@@ -247,5 +248,66 @@ describe('Planner', () => {
     expect(chapters[1].title).toBe('Entry Point');
     expect(chapters[2].title).toBe('HTTP Layer');
     expect(chapters[1].prerequisites).toEqual(['ch-1']);
+  });
+
+  it('should pass track context to prompt template', async () => {
+    const mockLLMClient: ILLMClient = {
+      complete: vi.fn().mockResolvedValue({
+        content: '{"chapters": []}',
+        tokensUsed: 50,
+      } as LLMResponse),
+    };
+
+    const mockPromptLoader: IPromptLoader = {
+      load: vi.fn().mockReturnValue('prompt'),
+    };
+
+    const track: Track = {
+      id: 'backend',
+      label: 'Backend',
+      description: 'Server-side logic and API layer',
+      focusTypes: ['http', 'data-flow', 'error-handling'],
+      confidence: 0.9,
+      suggestedOrder: 1,
+    };
+
+    const planner = new Planner(mockLLMClient, mockPromptLoader);
+    const analysis = createMockAnalysis();
+    const userContext = createMockUserContext();
+
+    await planner.plan(analysis, userContext, track);
+
+    expect(mockPromptLoader.load).toHaveBeenCalledWith('planner', expect.objectContaining({
+      trackId: 'backend',
+      trackLabel: 'Backend',
+      trackDescription: 'Server-side logic and API layer',
+      trackFocusTypes: 'http, data-flow, error-handling',
+    }));
+  });
+
+  it('should work without track (backward compat)', async () => {
+    const mockLLMClient: ILLMClient = {
+      complete: vi.fn().mockResolvedValue({
+        content: '{"chapters": []}',
+        tokensUsed: 50,
+      } as LLMResponse),
+    };
+
+    const mockPromptLoader: IPromptLoader = {
+      load: vi.fn().mockReturnValue('prompt'),
+    };
+
+    const planner = new Planner(mockLLMClient, mockPromptLoader);
+    const analysis = createMockAnalysis();
+    const userContext = createMockUserContext();
+
+    await planner.plan(analysis, userContext);
+
+    expect(mockPromptLoader.load).toHaveBeenCalledWith('planner', expect.objectContaining({
+      trackId: undefined,
+      trackLabel: undefined,
+      trackDescription: undefined,
+      trackFocusTypes: undefined,
+    }));
   });
 });
