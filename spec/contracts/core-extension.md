@@ -111,7 +111,9 @@ type ExtensionToWebviewMessage =
   | { type: 'question:answering' }
   | { type: 'question:answered'; answer: Answer }
   | { type: 'tracks:detected'; tracks: Track[] }
-  | { type: 'progress:updated'; progress: SessionProgress };
+  | { type: 'progress:updated'; progress: SessionProgress }
+  | { type: 'chapter:skeleton'; chapterId: string; skeleton: ChapterSkeleton }
+  | { type: 'prefetch:progress'; done: number; total: number };
 ```
 
 ### Webview → Extension

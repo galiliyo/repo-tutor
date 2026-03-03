@@ -36,6 +36,18 @@ function linkifyFilePaths(html: string, knownFiles: Set<string>): string {
 import { getCoreAdapter, getDefaultUserContext } from '../core-adapter';
 import { SessionState } from './ChaptersTreeProvider';
 
+interface ChapterSkeleton {
+  title: string;
+  order: number;
+  trackLabel?: string;
+  complexity?: 'low' | 'medium' | 'high';
+  focus: string;
+  learningObjectives: string[];
+  targetFiles: Array<{ path: string; language?: string }>;
+  dependencies: Array<{ from: string; to: string }>;
+  moduleName?: string;
+}
+
 // Message types from contract
 type ExtensionToWebviewMessage =
   | { type: 'init'; chapters: Chapter[]; currentChapterId: string | null; tracks?: Track[]; currentTrackId?: string | null }
@@ -49,7 +61,9 @@ type ExtensionToWebviewMessage =
   | { type: 'answer:explanation-chunk'; questionId: string; text: string }
   | { type: 'answer:explanation-done'; questionId: string }
   | { type: 'question:answering' }
-  | { type: 'question:answered'; answer: Answer };
+  | { type: 'question:answered'; answer: Answer }
+  | { type: 'chapter:skeleton'; chapterId: string; skeleton: ChapterSkeleton }
+  | { type: 'prefetch:progress'; done: number; total: number };
 
 type WebviewToExtensionMessage =
   | { type: 'ready' }
@@ -270,7 +284,7 @@ export class LearningPanel {
         ).length;
         this._postMessage({
           type: 'prefetch:progress', done: cached, total
-        } as any);
+        });
       }
     } finally {
       this._prefetching = false;
