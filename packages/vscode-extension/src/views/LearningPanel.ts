@@ -188,6 +188,42 @@ export class LearningPanel {
   private async _loadChapter(chapterId: string) {
     this._postMessage({ type: 'chapter:loading', chapterId });
 
+    // Send skeleton immediately from planner data + analysis
+    const chapterMeta = this._session.chapters.find(c => c.id === chapterId);
+    if (chapterMeta) {
+      const graph = this._session.analysisResult.dependencyGraph;
+      const targetFileSet = new Set(chapterMeta.targetFiles);
+      const relevantEdges = (graph?.edges ?? []).filter(
+        e => targetFileSet.has(e.from) && targetFileSet.has(e.to)
+      );
+      const nodes = graph?.nodes ?? [];
+      const trackLabel = this._session.detectedTracks?.find(
+        t => t.id === chapterMeta.trackId
+      )?.label;
+      const mod = this._session.analysisResult.modules?.find(
+        m => chapterMeta.targetFiles.some(f => f.startsWith(m.path))
+      );
+
+      this._postMessage({
+        type: 'chapter:skeleton',
+        chapterId,
+        skeleton: {
+          title: chapterMeta.title,
+          order: chapterMeta.order,
+          trackLabel,
+          complexity: chapterMeta.estimatedComplexity,
+          focus: chapterMeta.focus,
+          learningObjectives: chapterMeta.learningObjectives,
+          targetFiles: chapterMeta.targetFiles.map(path => ({
+            path,
+            language: nodes.find(n => n.path === path)?.language,
+          })),
+          dependencies: relevantEdges.map(e => ({ from: e.from, to: e.to })),
+          moduleName: mod?.name,
+        },
+      });
+    }
+
     try {
       // Check cache
       let content = this._generatedContent.get(chapterId);
@@ -528,6 +564,31 @@ export class LearningPanel {
     }
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+    .skeleton-section {
+      animation: fadeIn 0.3s ease-in;
+    }
+    .objectives-list {
+      list-style: none;
+      padding: 0;
+    }
+    .objectives-list li {
+      padding: 4px 0;
+      padding-left: 20px;
+      position: relative;
+    }
+    .objectives-list li::before {
+      content: '○';
+      position: absolute;
+      left: 0;
+      opacity: 0.5;
+    }
+    .dependency-chain {
+      color: var(--vscode-descriptionForeground);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     h1 {
       font-size: 1.8em;
@@ -919,6 +980,97 @@ export class LearningPanel {
       mainContentEl.appendChild(div);
     }
 
+    function renderSkeleton(skeleton) {
+      mainContentEl.replaceChildren();
+
+      // Header
+      var h1 = document.createElement('h1');
+      h1.textContent = skeleton.title;
+      mainContentEl.appendChild(h1);
+
+      var meta = document.createElement('div');
+      meta.className = 'chapter-meta';
+      var parts = ['Chapter ' + skeleton.order];
+      if (skeleton.trackLabel) parts.push(skeleton.trackLabel);
+      if (skeleton.complexity) parts.push(skeleton.complexity + ' complexity');
+      meta.textContent = parts.join(' · ');
+      mainContentEl.appendChild(meta);
+
+      // Learning objectives
+      if (skeleton.learningObjectives.length > 0) {
+        var objSection = document.createElement('div');
+        objSection.className = 'section skeleton-section';
+        var objH2 = document.createElement('h2');
+        objH2.textContent = "What you'll learn";
+        objSection.appendChild(objH2);
+        var ul = document.createElement('ul');
+        ul.className = 'objectives-list';
+        skeleton.learningObjectives.forEach(function(obj) {
+          var li = document.createElement('li');
+          li.textContent = obj;
+          ul.appendChild(li);
+        });
+        objSection.appendChild(ul);
+        mainContentEl.appendChild(objSection);
+      }
+
+      // Files in focus
+      if (skeleton.targetFiles.length > 0) {
+        var filesSection = document.createElement('div');
+        filesSection.className = 'section skeleton-section';
+        var filesH2 = document.createElement('h2');
+        filesH2.textContent = 'Files in focus';
+        filesSection.appendChild(filesH2);
+
+        skeleton.targetFiles.forEach(function(f) {
+          var link = document.createElement('a');
+          link.className = 'code-ref';
+          link.dataset.file = f.path;
+          link.textContent = f.path + (f.language ? ' (' + f.language + ')' : '');
+          filesSection.appendChild(link);
+          filesSection.appendChild(document.createTextNode(' '));
+        });
+
+        // Dependency chain
+        if (skeleton.dependencies.length > 0) {
+          var depDiv = document.createElement('div');
+          depDiv.className = 'dependency-chain';
+          depDiv.style.marginTop = '12px';
+          depDiv.style.fontFamily = 'var(--vscode-editor-font-family)';
+          depDiv.style.fontSize = '13px';
+          depDiv.style.opacity = '0.8';
+          var chain = skeleton.dependencies.map(function(d) {
+            return d.from.split('/').pop() + ' → ' + d.to.split('/').pop();
+          }).join(', ');
+          depDiv.textContent = 'Dependencies: ' + chain;
+          filesSection.appendChild(depDiv);
+        }
+
+        mainContentEl.appendChild(filesSection);
+      }
+
+      // Module context
+      if (skeleton.moduleName) {
+        var modDiv = document.createElement('div');
+        modDiv.className = 'section skeleton-section';
+        modDiv.style.opacity = '0.7';
+        modDiv.textContent = 'Module: ' + skeleton.moduleName;
+        mainContentEl.appendChild(modDiv);
+      }
+
+      // Generating indicator
+      var genDiv = document.createElement('div');
+      genDiv.className = 'loading';
+      genDiv.id = 'skeletonLoadingIndicator';
+      var spinner = document.createElement('div');
+      spinner.className = 'loading-spinner';
+      genDiv.appendChild(spinner);
+      var genP = document.createElement('p');
+      genP.textContent = 'Generating detailed content...';
+      genDiv.appendChild(genP);
+      mainContentEl.appendChild(genDiv);
+    }
+
     function renderCodeRefs(refs) {
       const container = document.createElement('div');
       container.style.marginTop = '12px';
@@ -1295,7 +1447,28 @@ export class LearningPanel {
         case 'chapter:loading':
           state.currentChapterId = message.chapterId;
           renderChapterList();
-          renderLoading('Generating chapter content...');
+          // Don't call renderLoading — skeleton is already showing with its own spinner
+          break;
+
+        case 'chapter:skeleton':
+          state.currentChapterId = message.chapterId;
+          renderChapterList();
+          renderSkeleton(message.skeleton);
+          break;
+
+        case 'prefetch:progress':
+          var indicator = document.getElementById('prefetchIndicator');
+          if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'prefetchIndicator';
+            indicator.style.cssText = 'position:fixed;bottom:8px;right:16px;font-size:12px;opacity:0.6;';
+            document.body.appendChild(indicator);
+          }
+          if (message.done >= message.total) {
+            indicator.remove();
+          } else {
+            indicator.textContent = 'Preparing chapters... ' + message.done + '/' + message.total;
+          }
           break;
 
         case 'chapter:loaded':
