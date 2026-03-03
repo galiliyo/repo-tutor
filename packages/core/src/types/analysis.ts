@@ -1,6 +1,6 @@
 // packages/core/src/types/analysis.ts
 
-import type { Track } from './track';
+import type { Track, TrackId } from './track';
 
 export interface FileReference {
   path: string;
@@ -85,4 +85,5 @@ export interface AnalysisResult {
   stateManagement?: StateManagementAnalysis;
   analyzedAt: string;
   detectedTracks?: Track[];
+  fileTrackMap?: Map<string, TrackId>;
 }
