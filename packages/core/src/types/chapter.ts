@@ -54,6 +54,13 @@ export interface ChapterContent {
   generatedAt?: string;
 }
 
+export interface ChapterOutline {
+  chapterId: string;
+  title: string;
+  sections: { heading: string; summary: string }[];
+  keyTakeaways: string[];
+}
+
 export interface EvidenceFile {
   path: string;
   language?: string;
