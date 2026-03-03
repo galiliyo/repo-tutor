@@ -76,7 +76,9 @@ export class Analyzer {
       analyzedAt: new Date().toISOString(),
     };
 
-    result.detectedTracks = await detectTracks(absolutePath, files, result);
+    const { tracks: detectedTracks, fileTrackMap } = await detectTracks(absolutePath, files, result);
+    result.detectedTracks = detectedTracks;
+    result.fileTrackMap = fileTrackMap;
 
     return result;
   }

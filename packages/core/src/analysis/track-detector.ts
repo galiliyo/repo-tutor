@@ -211,6 +211,27 @@ export function fileMatchesDir(file: string, dir: string): boolean {
   return normalized.startsWith(normalizedDir + '/');
 }
 
+export function classifyFile(filePath: string, content?: string): TrackId | null {
+  // Tier 1: Directory match
+  if (FE_DIRS.some(d => fileMatchesDir(filePath, d))) return 'frontend';
+  if (BE_DIRS.some(d => fileMatchesDir(filePath, d))) return 'backend';
+  if (INFRA_DIRS.some(d => fileMatchesDir(filePath, d))) return 'infra';
+
+  // Tier 2: Extension-based
+  if (/\.(jsx|tsx)$/.test(filePath) || /\.module\.(css|scss)$/.test(filePath)) return 'frontend';
+
+  // Tier 3: Content-based
+  if (content) {
+    if (FE_FRAMEWORK_IMPORTS.some(pkg => matchesImport(content, pkg))) return 'frontend';
+    if (containsAny(content, FE_DOM_APIS)) return 'frontend';
+    if (BE_FRAMEWORK_IMPORTS.some(pkg => matchesImport(content, pkg))) return 'backend';
+    if (BE_DB_IMPORTS.some(pkg => matchesImport(content, pkg))) return 'backend';
+    if (containsAny(content, BE_SERVER_PATTERNS)) return 'backend';
+  }
+
+  return null;
+}
+
 export function classifyFileTrack(filePath: string): TrackId | 'shared' {
   if (FE_DIRS.some(d => fileMatchesDir(filePath, d))) return 'frontend';
   if (BE_DIRS.some(d => fileMatchesDir(filePath, d))) return 'backend';
@@ -408,7 +429,7 @@ export async function detectTracks(
   files: string[],
   analysis: AnalysisResult,
   fileContents?: Map<string, string>,
-): Promise<Track[]> {
+): Promise<{ tracks: Track[]; fileTrackMap: Map<string, TrackId> }> {
   const contents = await getFileContents(repoPath, files, fileContents);
 
   // Check monorepo tools for architecture
@@ -425,15 +446,25 @@ export async function detectTracks(
     infra: round2(scoreInfra(files)),
   };
 
+  // Build file-to-track map
+  const fileTrackMap = new Map<string, TrackId>();
+  for (const file of files) {
+    const track = classifyFile(file, contents.get(file));
+    if (track) fileTrackMap.set(file, track);
+  }
+
   // Build all tracks — UI decides which to suggest (>= 0.3) vs show dimmed
-  return TRACK_DEFS
-    .map(def => ({
-      id: def.id,
-      label: def.label,
-      description: def.description,
-      focusTypes: def.focusTypes,
-      confidence: scores[def.id],
-      suggestedOrder: def.suggestedOrder,
-    }))
-    .sort((a, b) => a.suggestedOrder - b.suggestedOrder);
+  return {
+    tracks: TRACK_DEFS
+      .map(def => ({
+        id: def.id,
+        label: def.label,
+        description: def.description,
+        focusTypes: def.focusTypes,
+        confidence: scores[def.id],
+        suggestedOrder: def.suggestedOrder,
+      }))
+      .sort((a, b) => a.suggestedOrder - b.suggestedOrder),
+    fileTrackMap,
+  };
 }

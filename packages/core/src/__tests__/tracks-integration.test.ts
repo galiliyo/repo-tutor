@@ -44,7 +44,7 @@ describe('Track detection integration', () => {
       analyzedAt: new Date().toISOString(),
     };
 
-    const tracks = await detectTracks('/tmp/fullstack-app', files, analysis, fileContents);
+    const { tracks } = await detectTracks('/tmp/fullstack-app', files, analysis, fileContents);
 
     const fe = tracks.find(t => t.id === 'frontend')!;
     const be = tracks.find(t => t.id === 'backend')!;
@@ -75,7 +75,7 @@ describe('Track detection integration', () => {
       analyzedAt: new Date().toISOString(),
     };
 
-    const tracks = await detectTracks('/tmp/empty-repo', files, analysis);
+    const { tracks } = await detectTracks('/tmp/empty-repo', files, analysis);
 
     expect(tracks).toHaveLength(4); // all tracks always returned
 
@@ -111,7 +111,7 @@ describe('Track detection integration', () => {
       analyzedAt: new Date().toISOString(),
     };
 
-    const tracks = await detectTracks('/tmp/react-app', files, analysis, fileContents);
+    const { tracks } = await detectTracks('/tmp/react-app', files, analysis, fileContents);
 
     const fe = tracks.find(t => t.id === 'frontend')!;
     const be = tracks.find(t => t.id === 'backend')!;

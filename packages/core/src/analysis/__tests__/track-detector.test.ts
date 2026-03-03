@@ -1,7 +1,7 @@
 // packages/core/src/analysis/__tests__/track-detector.test.ts
 
 import { describe, it, expect } from 'vitest';
-import { detectTracks, classifyFileTrack } from '../track-detector';
+import { detectTracks, classifyFileTrack, classifyFile } from '../track-detector';
 import type { AnalysisResult } from '../../types';
 
 function stubAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
@@ -19,7 +19,7 @@ function stubAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
 
 describe('detectTracks', () => {
   it('always detects architecture track with confidence > 0', async () => {
-    const tracks = await detectTracks('/fake', ['src/index.ts'], stubAnalysis(), new Map());
+    const { tracks } = await detectTracks('/fake', ['src/index.ts'], stubAnalysis(), new Map());
     const arch = tracks.find(t => t.id === 'architecture');
     expect(arch).toBeDefined();
     expect(arch!.confidence).toBeGreaterThan(0);
@@ -30,7 +30,7 @@ describe('detectTracks', () => {
     const contents = new Map([
       ['src/App.tsx', "import React from 'react';\nexport default function App() { return <div/>; }"],
     ]);
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const fe = tracks.find(t => t.id === 'frontend');
     expect(fe).toBeDefined();
     expect(fe!.confidence).toBeGreaterThanOrEqual(0.3);
@@ -41,7 +41,7 @@ describe('detectTracks', () => {
     const contents = new Map([
       ['src/main.tsx', "const el = document.querySelector('#app');\nel.textContent = 'hi';"],
     ]);
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const fe = tracks.find(t => t.id === 'frontend');
     expect(fe).toBeDefined();
     // DOM APIs (+0.2) + .tsx file (+0.1) = 0.3
@@ -51,7 +51,7 @@ describe('detectTracks', () => {
   it('detects frontend from directory conventions', async () => {
     const files = ['src/components/Button.tsx', 'src/hooks/useAuth.ts', 'src/pages/Home.tsx'];
     const contents = new Map<string, string>();
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const fe = tracks.find(t => t.id === 'frontend');
     expect(fe).toBeDefined();
     expect(fe!.confidence).toBeGreaterThanOrEqual(0.2);
@@ -62,7 +62,7 @@ describe('detectTracks', () => {
     const contents = new Map([
       ['src/server.ts', "import express from 'express';\nconst app = express();\napp.listen(3000);"],
     ]);
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const be = tracks.find(t => t.id === 'backend');
     expect(be).toBeDefined();
     expect(be!.confidence).toBeGreaterThanOrEqual(0.3);
@@ -73,7 +73,7 @@ describe('detectTracks', () => {
     // Add http analysis to push over 0.3 threshold (dirs +0.2, http +0.2)
     const analysis = stubAnalysis({ http: { framework: 'express', routes: [], middleware: [] } });
     const contents = new Map<string, string>();
-    const tracks = await detectTracks('/fake', files, analysis, contents);
+    const { tracks } = await detectTracks('/fake', files, analysis, contents);
     const be = tracks.find(t => t.id === 'backend');
     expect(be).toBeDefined();
     expect(be!.confidence).toBeGreaterThanOrEqual(0.3);
@@ -82,14 +82,14 @@ describe('detectTracks', () => {
   it('detects infra from Dockerfile', async () => {
     const files = ['Dockerfile', 'src/index.ts'];
     const contents = new Map<string, string>();
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const infra = tracks.find(t => t.id === 'infra');
     expect(infra).toBeDefined();
     expect(infra!.confidence).toBeGreaterThanOrEqual(0.3);
   });
 
   it('returns all 4 tracks even when confidence is low', async () => {
-    const tracks = await detectTracks('/fake', [], stubAnalysis(), new Map());
+    const { tracks } = await detectTracks('/fake', [], stubAnalysis(), new Map());
     expect(tracks).toHaveLength(4);
     // FE/BE/infra should have 0 confidence with no signals
     const fe = tracks.find(t => t.id === 'frontend')!;
@@ -105,7 +105,7 @@ describe('detectTracks', () => {
     const contents = new Map([
       ['app/main.py', "from fastapi import FastAPI\napp = FastAPI()\n@app.get('/health')\ndef health(): return {'ok': True}"],
     ]);
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const be = tracks.find(t => t.id === 'backend')!;
     expect(be.confidence).toBeGreaterThanOrEqual(0.3);
   });
@@ -115,7 +115,7 @@ describe('detectTracks', () => {
     const contents = new Map([
       ['src/main/java/com/example/App.java', 'import org.springframework.boot.SpringApplication;\n@SpringBootApplication\npublic class App {}'],
     ]);
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const be = tracks.find(t => t.id === 'backend')!;
     expect(be.confidence).toBeGreaterThanOrEqual(0.3);
   });
@@ -125,7 +125,7 @@ describe('detectTracks', () => {
     const contents = new Map([
       ['cmd/server/main.go', 'import "github.com/gin-gonic/gin"\nfunc main() { r := gin.Default(); r.GET("/ping", handler); r.Run() }'],
     ]);
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const be = tracks.find(t => t.id === 'backend')!;
     expect(be.confidence).toBeGreaterThanOrEqual(0.3);
   });
@@ -135,7 +135,7 @@ describe('detectTracks', () => {
     const contents = new Map([
       ['app/Http/Controllers/UserController.php', "<?php\nuse Illuminate\\Http\\Request;\nclass UserController {}"],
     ]);
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const be = tracks.find(t => t.id === 'backend')!;
     expect(be.confidence).toBeGreaterThanOrEqual(0.3);
   });
@@ -145,7 +145,7 @@ describe('detectTracks', () => {
     const contents = new Map([
       ['app/controllers/users_controller.rb', "require 'rails'\nclass UsersController < ApplicationController\nend"],
     ]);
-    const tracks = await detectTracks('/fake', files, stubAnalysis(), contents);
+    const { tracks } = await detectTracks('/fake', files, stubAnalysis(), contents);
     const be = tracks.find(t => t.id === 'backend')!;
     expect(be.confidence).toBeGreaterThanOrEqual(0.3);
   });
@@ -166,8 +166,8 @@ describe('detectTracks', () => {
       ],
     });
 
-    const tracksFew = await detectTracks('/fake', ['src/a.ts'], fewModules, new Map());
-    const tracksMany = await detectTracks('/fake', ['a.ts'], manyModules, new Map());
+    const { tracks: tracksFew } = await detectTracks('/fake', ['src/a.ts'], fewModules, new Map());
+    const { tracks: tracksMany } = await detectTracks('/fake', ['a.ts'], manyModules, new Map());
 
     const archFew = tracksFew.find(t => t.id === 'architecture')!;
     const archMany = tracksMany.find(t => t.id === 'architecture')!;
@@ -211,5 +211,47 @@ describe('classifyFileTrack', () => {
   it('handles backslash paths (Windows)', () => {
     expect(classifyFileTrack('src\\components\\Button.tsx')).toBe('frontend');
     expect(classifyFileTrack('src\\routes\\users.ts')).toBe('backend');
+  });
+});
+
+describe('classifyFile', () => {
+  it('classifies by FE directory', () => {
+    expect(classifyFile('src/components/Button.tsx')).toBe('frontend');
+  });
+
+  it('classifies by BE directory', () => {
+    expect(classifyFile('src/routes/api.ts')).toBe('backend');
+  });
+
+  it('classifies .tsx as frontend', () => {
+    expect(classifyFile('app/layout.tsx')).toBe('frontend');
+  });
+
+  it('classifies .module.css as frontend', () => {
+    expect(classifyFile('styles/main.module.css')).toBe('frontend');
+  });
+
+  it('classifies by FE import content', () => {
+    expect(classifyFile('app/page.ts', "import { useState } from 'react';")).toBe('frontend');
+  });
+
+  it('classifies by DOM API content', () => {
+    expect(classifyFile('lib/dom.ts', "document.querySelector('#app')")).toBe('frontend');
+  });
+
+  it('classifies by BE import content', () => {
+    expect(classifyFile('app/server.ts', "import express from 'express';")).toBe('backend');
+  });
+
+  it('classifies by DB import content', () => {
+    expect(classifyFile('lib/db.ts', "import { Pool } from 'pg';")).toBe('backend');
+  });
+
+  it('returns null for ambiguous files', () => {
+    expect(classifyFile('src/utils/logger.ts', "export function log(msg: string) {}")).toBeNull();
+  });
+
+  it('returns null when no content for unknown dir', () => {
+    expect(classifyFile('lib/shared/helpers.ts')).toBeNull();
   });
 });
