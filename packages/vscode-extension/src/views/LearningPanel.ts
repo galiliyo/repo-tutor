@@ -1186,6 +1186,63 @@ export class LearningPanel {
       mainContentEl.appendChild(genDiv);
     }
 
+    function renderOutline(outline) {
+      mainContentEl.replaceChildren();
+
+      var h1 = document.createElement('h1');
+      h1.textContent = outline.title;
+      mainContentEl.appendChild(h1);
+
+      var meta = document.createElement('div');
+      meta.className = 'chapter-meta';
+      meta.textContent = 'Chapter outline — detailed content loading...';
+      mainContentEl.appendChild(meta);
+
+      outline.sections.forEach(function(section) {
+        var sectionDiv = document.createElement('div');
+        sectionDiv.className = 'section skeleton-section';
+
+        var h2 = document.createElement('h2');
+        h2.textContent = section.heading;
+        sectionDiv.appendChild(h2);
+
+        var p = document.createElement('p');
+        p.textContent = section.summary;
+        p.style.opacity = '0.8';
+        sectionDiv.appendChild(p);
+
+        var loadingDiv = document.createElement('div');
+        loadingDiv.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;opacity:0.5;';
+        var spinner = document.createElement('div');
+        spinner.className = 'loading-spinner';
+        spinner.style.cssText = 'width:14px;height:14px;border-width:2px;';
+        loadingDiv.appendChild(spinner);
+        var loadingText = document.createElement('span');
+        loadingText.textContent = 'Loading detailed content...';
+        loadingText.style.fontSize = '0.85em';
+        loadingDiv.appendChild(loadingText);
+        sectionDiv.appendChild(loadingDiv);
+
+        mainContentEl.appendChild(sectionDiv);
+      });
+
+      if (outline.keyTakeaways && outline.keyTakeaways.length > 0) {
+        var takeaways = document.createElement('div');
+        takeaways.className = 'takeaways';
+        var h3 = document.createElement('h3');
+        h3.textContent = 'Key Takeaways';
+        takeaways.appendChild(h3);
+        var ul = document.createElement('ul');
+        outline.keyTakeaways.forEach(function(t) {
+          var li = document.createElement('li');
+          li.textContent = t;
+          ul.appendChild(li);
+        });
+        takeaways.appendChild(ul);
+        mainContentEl.appendChild(takeaways);
+      }
+    }
+
     function renderCodeRefs(refs) {
       const container = document.createElement('div');
       container.style.marginTop = '12px';
@@ -1569,6 +1626,12 @@ export class LearningPanel {
           state.currentChapterId = message.chapterId;
           renderChapterList();
           renderSkeleton(message.skeleton);
+          break;
+
+        case 'chapter:outline':
+          state.currentChapterId = message.chapterId;
+          renderChapterList();
+          renderOutline(message.outline);
           break;
 
         case 'prefetch:progress':
