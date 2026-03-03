@@ -30,6 +30,15 @@
             "type": "boolean",
             "description": "Whether the content was truncated"
           },
+          "tier": {
+            "type": "string",
+            "enum": ["A", "B", "C", "D"],
+            "description": "Relevance tier (A=primary, D=reference)"
+          },
+          "headTailTruncated": {
+            "type": "boolean",
+            "description": "Whether head+tail truncation was applied (preserves imports and exports)"
+          },
           "relevantLines": {
             "type": "array",
             "items": {
@@ -86,6 +95,58 @@
     "totalTokensEstimate": {
       "type": "integer",
       "description": "Estimated token count for this evidence pack"
+    },
+    "budgetUsed": {
+      "type": "integer",
+      "description": "Actual chars consumed across all files"
+    },
+    "interfaceArtifact": {
+      "type": "object",
+      "description": "Structural summary of the repo's architecture",
+      "properties": {
+        "directoryTree": {
+          "type": "string",
+          "description": "Indented tree of relevant directories and files"
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "confidence": { "type": "number" },
+              "keySignals": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "required": ["id", "label", "confidence"]
+          }
+        },
+        "entryPoints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "frameworkStack": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "moduleMap": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "path": { "type": "string" },
+              "fileCount": { "type": "integer" },
+              "purpose": { "type": "string" }
+            },
+            "required": ["name", "path", "fileCount"]
+          }
+        }
+      },
+      "required": ["directoryTree", "tracks", "entryPoints", "frameworkStack", "moduleMap"]
     }
   },
   "required": ["chapterId", "files"]

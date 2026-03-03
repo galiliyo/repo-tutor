@@ -6,3 +6,4 @@ export { Planner } from './planner';
 export { ChapterWriter } from './chapter-writer';
 export { EvidenceBuilder } from './evidence-builder';
 export { QuestionAnswerer } from './question-answerer';
+export { buildInterfaceArtifact } from './interface-artifact';

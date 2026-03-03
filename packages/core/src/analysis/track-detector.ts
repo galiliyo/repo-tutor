@@ -47,7 +47,7 @@ const TRACK_DEFS: TrackDef[] = [
 
 // ── Signal constants ──
 
-const FE_FRAMEWORK_IMPORTS = [
+export const FE_FRAMEWORK_IMPORTS = [
   'react', 'vue', 'angular', 'svelte', 'solid-js', 'preact', 'lit', 'next', 'nuxt', 'remix',
 ];
 
@@ -62,7 +62,7 @@ const FE_DOM_APIS = [
 
 const FE_BUILD_TOOLS = ['webpack', 'vite', 'parcel', 'next', 'nuxt', 'remix'];
 
-const BE_FRAMEWORK_IMPORTS = [
+export const BE_FRAMEWORK_IMPORTS = [
   'express', 'fastify', 'koa', '@nestjs/core', 'hapi', 'hono', 'elysia',
 ];
 
@@ -75,7 +75,7 @@ const BE_SERVER_PATTERNS = [
   'app.listen', 'createServer', 'router.get', 'router.post', 'router.put', 'router.delete',
 ];
 
-const BE_DB_IMPORTS = [
+export const BE_DB_IMPORTS = [
   'pg', 'mysql2', 'mongoose', 'prisma', '@prisma/client', 'sequelize', 'typeorm', 'drizzle-orm', 'knex',
 ];
 

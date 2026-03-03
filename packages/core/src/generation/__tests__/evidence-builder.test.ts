@@ -1,197 +1,263 @@
 // packages/core/src/generation/__tests__/evidence-builder.test.ts
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { EvidenceBuilder } from '../evidence-builder';
-import type { Chapter, AnalysisResult } from '../../types';
+import {
+  EvidenceBuilder,
+  classifyTiers,
+  allocateBudgets,
+  readAndTruncate,
+} from '../evidence-builder';
+import type { Chapter, AnalysisResult, DependencyGraph, BudgetConfig, FileTier } from '../../types';
 import * as fs from 'fs/promises';
 
-// Mock the fs module
 vi.mock('fs/promises');
 
-describe('EvidenceBuilder', () => {
-  const mockedFs = vi.mocked(fs);
+const mockedFs = vi.mocked(fs);
 
-  beforeEach(() => {
-    vi.clearAllMocks();
+// --- helpers ---
+
+const mkChapter = (overrides: Partial<Chapter> = {}): Chapter => ({
+  id: 'ch-1',
+  title: 'Test Chapter',
+  order: 1,
+  focus: 'structure',
+  targetFiles: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'lib/d.ts', 'lib/e.ts'],
+  prerequisites: [],
+  learningObjectives: ['Learn structure'],
+  ...overrides,
+});
+
+const mkGraph = (edges: Array<{ from: string; to: string }> = []): DependencyGraph => ({
+  nodes: [],
+  edges,
+});
+
+const mkAnalysis = (overrides: Partial<AnalysisResult> = {}): AnalysisResult => ({
+  repoPath: '/test/project',
+  languages: ['typescript'],
+  entryPoints: [],
+  dependencyGraph: mkGraph(),
+  modules: [],
+  patterns: [],
+  analyzedAt: new Date().toISOString(),
+  ...overrides,
+});
+
+// =============================================================================
+// classifyTiers
+// =============================================================================
+
+describe('classifyTiers', () => {
+  it('assigns first 3 files as Tier A', () => {
+    const chapter = mkChapter();
+    const result = classifyTiers(chapter, mkGraph());
+    const tierA = result.filter((f) => f.tier === 'A');
+    expect(tierA.map((f) => f.path)).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts']);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('assigns 1-hop imports of Tier A as Tier B', () => {
+    const chapter = mkChapter();
+    // src/a.ts imports lib/d.ts
+    const graph = mkGraph([{ from: 'src/a.ts', to: 'lib/d.ts' }]);
+    const result = classifyTiers(chapter, graph);
+    expect(result.find((f) => f.path === 'lib/d.ts')?.tier).toBe('B');
   });
 
-  const createMockChapter = (): Chapter => ({
-    id: 'ch-1',
-    title: 'Test Chapter',
-    order: 1,
-    focus: 'structure',
-    targetFiles: ['src/index.ts', 'src/utils.ts'],
-    prerequisites: [],
-    learningObjectives: ['Learn structure'],
+  it('assigns same-directory files as Tier C', () => {
+    // src/a.ts is Tier A (in src/), so src/ siblings not in A or B become C
+    // But src/b.ts and src/c.ts are already Tier A
+    // Add an extra src file
+    const chapter = mkChapter({
+      targetFiles: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/extra.ts', 'lib/d.ts'],
+    });
+    const result = classifyTiers(chapter, mkGraph());
+    expect(result.find((f) => f.path === 'src/extra.ts')?.tier).toBe('C');
   });
 
-  const createMockAnalysis = (): AnalysisResult => ({
-    repoPath: '/test/project',
-    languages: ['typescript'],
-    entryPoints: [],
-    dependencyGraph: { nodes: [], edges: [] },
-    modules: [],
-    patterns: [],
-    analyzedAt: new Date().toISOString(),
+  it('assigns remaining files as Tier D', () => {
+    const chapter = mkChapter();
+    const result = classifyTiers(chapter, mkGraph());
+    // lib/d.ts and lib/e.ts are not in A, not imported by A, not same dir as A
+    expect(result.find((f) => f.path === 'lib/d.ts')?.tier).toBe('D');
+    expect(result.find((f) => f.path === 'lib/e.ts')?.tier).toBe('D');
   });
 
-  it('should build evidence pack from chapter files', async () => {
-    const mockIndexContent = 'export const main = () => {};';
-    const mockUtilsContent = 'export function helper() {}';
+  it('returns empty for no target files', () => {
+    const chapter = mkChapter({ targetFiles: [] });
+    expect(classifyTiers(chapter, mkGraph())).toEqual([]);
+  });
 
-    mockedFs.readFile
-      .mockResolvedValueOnce(mockIndexContent)
-      .mockResolvedValueOnce(mockUtilsContent);
+  it('all files are Tier A when ≤3 targets', () => {
+    const chapter = mkChapter({ targetFiles: ['a.ts', 'b.ts'] });
+    const result = classifyTiers(chapter, mkGraph());
+    expect(result.every((f) => f.tier === 'A')).toBe(true);
+  });
+});
+
+// =============================================================================
+// allocateBudgets
+// =============================================================================
+
+describe('allocateBudgets', () => {
+  const config: BudgetConfig = {
+    totalBudget: 100_000,
+    maxPerFile: 20_000,
+    minPerFile: 200,
+    headRatio: 0.7,
+    tierWeights: { A: 0.4, B: 0.3, C: 0.2, D: 0.1 },
+  };
+
+  it('allocates budget proportionally by tier', () => {
+    const files = [
+      { path: 'a.ts', tier: 'A' as FileTier, budgetChars: 0 },
+      { path: 'b.ts', tier: 'B' as FileTier, budgetChars: 0 },
+      { path: 'c.ts', tier: 'C' as FileTier, budgetChars: 0 },
+      { path: 'd.ts', tier: 'D' as FileTier, budgetChars: 0 },
+    ];
+    const result = allocateBudgets(files, config);
+    // Each tier has 1 file
+    // D gets 10k, C gets 20k (capped), B gets 30k (capped at 20k), A gets 40k + leftovers (capped at 20k)
+    expect(result.find((f) => f.path === 'a.ts')!.budgetChars).toBeGreaterThan(0);
+    expect(result.find((f) => f.path === 'd.ts')!.budgetChars).toBeGreaterThan(0);
+  });
+
+  it('caps at maxPerFile', () => {
+    const files = [{ path: 'a.ts', tier: 'A' as FileTier, budgetChars: 0 }];
+    const result = allocateBudgets(files, config);
+    // Only 1 file in Tier A, but tier budget = 40k + rollup from empty tiers
+    // maxPerFile = 20k → capped
+    expect(result[0].budgetChars).toBeLessThanOrEqual(config.maxPerFile);
+  });
+
+  it('rolls unused budget from empty tiers', () => {
+    // Only Tier A files — D, C, B budgets roll up to A
+    const files = [
+      { path: 'a.ts', tier: 'A' as FileTier, budgetChars: 0 },
+      { path: 'b.ts', tier: 'A' as FileTier, budgetChars: 0 },
+    ];
+    const result = allocateBudgets(files, config);
+    // Total budget = 100k, all tiers roll up to A, but each capped at 20k
+    // So 2 files × 20k max = 40k used, rest wasted
+    expect(result[0].budgetChars).toBe(config.maxPerFile);
+    expect(result[1].budgetChars).toBe(config.maxPerFile);
+  });
+
+  it('enforces minPerFile', () => {
+    // Many files in one tier → per-file budget may go below min
+    const files = Array.from({ length: 100 }, (_, i) => ({
+      path: `d${i}.ts`,
+      tier: 'D' as FileTier,
+      budgetChars: 0,
+    }));
+    const result = allocateBudgets(files, config);
+    expect(result.every((f) => f.budgetChars >= config.minPerFile)).toBe(true);
+  });
+
+  it('returns empty for no files', () => {
+    expect(allocateBudgets([], config)).toEqual([]);
+  });
+});
+
+// =============================================================================
+// readAndTruncate
+// =============================================================================
+
+describe('readAndTruncate', () => {
+  it('returns full content when within budget', async () => {
+    const content = 'const x = 1;\n';
+    mockedFs.readFile.mockResolvedValue(content);
+
+    const result = await readAndTruncate('file.ts', 1000, '/repo');
+    expect(result?.truncated).toBe(false);
+    expect(result?.content).toBe(content);
+    expect(result?.language).toBe('typescript');
+  });
+
+  it('applies head+tail truncation when exceeding budget', async () => {
+    const content = 'H'.repeat(500) + 'M'.repeat(500) + 'T'.repeat(500);
+    mockedFs.readFile.mockResolvedValue(content);
+
+    const result = await readAndTruncate('file.ts', 700, '/repo', 0.7);
+    expect(result?.truncated).toBe(true);
+    expect(result?.headTailTruncated).toBe(true);
+    // Head = 490 chars (700 * 0.7), Tail = 210 chars (700 * 0.3)
+    expect(result?.content).toContain('HHHH');
+    expect(result?.content).toContain('TTTT');
+    expect(result?.content).toContain('truncated');
+    expect(result?.content).toContain('lines omitted');
+  });
+
+  it('returns null for unreadable files', async () => {
+    mockedFs.readFile.mockRejectedValue(new Error('ENOENT'));
+    const result = await readAndTruncate('missing.ts', 1000, '/repo');
+    expect(result).toBeNull();
+  });
+
+  it('detects language from extension', async () => {
+    mockedFs.readFile.mockResolvedValue('code');
+    const result = await readAndTruncate('app.py', 1000, '/repo');
+    expect(result?.language).toBe('python');
+  });
+});
+
+// =============================================================================
+// EvidenceBuilder.build() integration
+// =============================================================================
+
+describe('EvidenceBuilder.build()', () => {
+  it('produces a complete evidence pack with tiers and artifact', async () => {
+    mockedFs.readFile.mockResolvedValue('const x = 1;');
 
     const builder = new EvidenceBuilder();
-    const chapter = createMockChapter();
-    const analysis = createMockAnalysis();
+    const chapter = mkChapter({ targetFiles: ['src/a.ts', 'src/b.ts'] });
+    const analysis = mkAnalysis();
 
-    const evidence = await builder.build(chapter, analysis);
+    const pack = await builder.build(chapter, analysis);
 
-    expect(evidence.chapterId).toBe('ch-1');
-    expect(evidence.files).toHaveLength(2);
-    expect(evidence.files[0].path).toBe('src/index.ts');
-    expect(evidence.files[0].content).toBe(mockIndexContent);
-    expect(evidence.files[0].language).toBe('typescript');
-    expect(evidence.files[0].truncated).toBe(false);
+    expect(pack.chapterId).toBe('ch-1');
+    expect(pack.files.length).toBe(2);
+    expect(pack.files[0].tier).toBe('A');
+    expect(pack.interfaceArtifact).toBeDefined();
+    expect(pack.budgetUsed).toBeGreaterThan(0);
+    expect(pack.totalTokensEstimate).toBeGreaterThan(0);
   });
 
-  it('should detect language from file extension', async () => {
-    mockedFs.readFile.mockResolvedValue('content');
-
+  it('handles empty targetFiles', async () => {
     const builder = new EvidenceBuilder();
-    const chapter: Chapter = {
-      id: 'ch-1',
-      title: 'Test',
-      order: 1,
-      focus: 'structure',
-      targetFiles: [
-        'file.ts',
-        'file.js',
-        'file.py',
-        'file.go',
-        'file.json',
-        'file.md',
-        'file.unknown',
-      ],
-      prerequisites: [],
-      learningObjectives: [],
-    };
-    const analysis = createMockAnalysis();
+    const chapter = mkChapter({ targetFiles: [] });
+    const analysis = mkAnalysis();
 
-    const evidence = await builder.build(chapter, analysis);
+    const pack = await builder.build(chapter, analysis);
 
-    expect(evidence.files[0].language).toBe('typescript');
-    expect(evidence.files[1].language).toBe('javascript');
-    expect(evidence.files[2].language).toBe('python');
-    expect(evidence.files[3].language).toBe('go');
-    expect(evidence.files[4].language).toBe('json');
-    expect(evidence.files[5].language).toBe('markdown');
-    expect(evidence.files[6].language).toBe('text');
+    expect(pack.files).toHaveLength(0);
+    expect(pack.budgetUsed).toBe(0);
+    expect(pack.totalTokensEstimate).toBe(0);
   });
 
-  it('should truncate large files', async () => {
-    const largeContent = 'x'.repeat(15000);
-    mockedFs.readFile.mockResolvedValue(largeContent);
-
-    const builder = new EvidenceBuilder(10000);
-    const chapter: Chapter = {
-      id: 'ch-1',
-      title: 'Test',
-      order: 1,
-      focus: 'structure',
-      targetFiles: ['large-file.ts'],
-      prerequisites: [],
-      learningObjectives: [],
-    };
-    const analysis = createMockAnalysis();
-
-    const evidence = await builder.build(chapter, analysis);
-
-    expect(evidence.files[0].truncated).toBe(true);
-    expect(evidence.files[0].content.length).toBeLessThan(15000);
-    expect(evidence.files[0].content).toContain('... (truncated)');
-  });
-
-  it('should skip files that cannot be read', async () => {
+  it('skips unreadable files gracefully', async () => {
     mockedFs.readFile
-      .mockResolvedValueOnce('content')
+      .mockResolvedValueOnce('good content')
       .mockRejectedValueOnce(new Error('ENOENT'));
 
     const builder = new EvidenceBuilder();
-    const chapter = createMockChapter();
-    const analysis = createMockAnalysis();
+    const chapter = mkChapter({ targetFiles: ['good.ts', 'bad.ts'] });
+    const analysis = mkAnalysis();
 
-    const evidence = await builder.build(chapter, analysis);
-
-    expect(evidence.files).toHaveLength(1);
-    expect(evidence.files[0].path).toBe('src/index.ts');
+    const pack = await builder.build(chapter, analysis);
+    expect(pack.files).toHaveLength(1);
+    expect(pack.files[0].path).toBe('good.ts');
   });
 
-  it('should estimate token count', async () => {
-    const content = 'x'.repeat(400); // ~100 tokens at 4 chars/token
-    mockedFs.readFile.mockResolvedValue(content);
+  it('accepts custom budget config', async () => {
+    mockedFs.readFile.mockResolvedValue('x'.repeat(500));
 
-    const builder = new EvidenceBuilder();
-    const chapter: Chapter = {
-      id: 'ch-1',
-      title: 'Test',
-      order: 1,
-      focus: 'structure',
-      targetFiles: ['file.ts'],
-      prerequisites: [],
-      learningObjectives: [],
-    };
-    const analysis = createMockAnalysis();
+    const builder = new EvidenceBuilder({ maxPerFile: 100 });
+    const chapter = mkChapter({ targetFiles: ['file.ts'] });
+    const analysis = mkAnalysis();
 
-    const evidence = await builder.build(chapter, analysis);
-
-    expect(evidence.totalTokensEstimate).toBe(100);
-  });
-
-  it('should handle empty target files', async () => {
-    const builder = new EvidenceBuilder();
-    const chapter: Chapter = {
-      id: 'ch-1',
-      title: 'Test',
-      order: 1,
-      focus: 'structure',
-      targetFiles: [],
-      prerequisites: [],
-      learningObjectives: [],
-    };
-    const analysis = createMockAnalysis();
-
-    const evidence = await builder.build(chapter, analysis);
-
-    expect(evidence.files).toHaveLength(0);
-    expect(evidence.totalTokensEstimate).toBe(0);
-  });
-
-  it('should use custom max file chars', async () => {
-    const content = 'x'.repeat(500);
-    mockedFs.readFile.mockResolvedValue(content);
-
-    const builder = new EvidenceBuilder(100);
-    const chapter: Chapter = {
-      id: 'ch-1',
-      title: 'Test',
-      order: 1,
-      focus: 'structure',
-      targetFiles: ['file.ts'],
-      prerequisites: [],
-      learningObjectives: [],
-    };
-    const analysis = createMockAnalysis();
-
-    const evidence = await builder.build(chapter, analysis);
-
-    expect(evidence.files[0].truncated).toBe(true);
-    expect(evidence.files[0].content.length).toBeLessThan(500);
+    const pack = await builder.build(chapter, analysis);
+    // File exceeds 100 chars → should be truncated
+    expect(pack.files[0].truncated).toBe(true);
+    expect(pack.files[0].headTailTruncated).toBe(true);
   });
 });

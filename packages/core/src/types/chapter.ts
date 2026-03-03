@@ -59,6 +59,8 @@ export interface EvidenceFile {
   language?: string;
   content: string;
   truncated?: boolean;
+  tier?: import('./evidence').FileTier;
+  headTailTruncated?: boolean;
   relevantLines?: Array<{
     start: number;
     end: number;
@@ -87,4 +89,6 @@ export interface EvidencePack {
   dependencies?: EvidenceDependency[];
   redactionsApplied?: string[];
   totalTokensEstimate?: number;
+  interfaceArtifact?: import('./evidence').InterfaceArtifact;
+  budgetUsed?: number;
 }

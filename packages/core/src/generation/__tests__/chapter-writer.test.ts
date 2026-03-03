@@ -97,7 +97,7 @@ describe('ChapterWriter', () => {
       ['ch-0']
     );
 
-    expect(mockPromptLoader.load).toHaveBeenCalledWith('chapter-writer', expect.objectContaining({
+    expect(mockPromptLoader.load).toHaveBeenCalledWith('chapter-writer-v2', expect.objectContaining({
       chapterId: 'ch-1',
       chapterTitle: 'Chapter Title',
       learningObjectives: ['Objective 1', 'Objective 2'],
@@ -198,7 +198,7 @@ describe('ChapterWriter', () => {
 
     await writer.generate(evidence, 'Title', [], userContext);
 
-    expect(mockPromptLoader.load).toHaveBeenCalledWith('chapter-writer', expect.objectContaining({
+    expect(mockPromptLoader.load).toHaveBeenCalledWith('chapter-writer-v2', expect.objectContaining({
       completedChapters: 'None',
     }));
   });

@@ -17,13 +17,14 @@ export class ChapterWriter {
     userContext: UserContext,
     completedChapters: string[] = []
   ): Promise<ChapterContent> {
-    const prompt = this.promptLoader.load('chapter-writer', {
+    const prompt = this.promptLoader.load('chapter-writer-v2', {
       chapterId: evidence.chapterId,
       chapterTitle,
       learningObjectives,
       skillLevel: userContext.skillLevel,
       userPreferredLanguage: userContext.preferredLanguage,
       evidencePack: evidence,
+      interfaceArtifact: evidence.interfaceArtifact,
       completedChapters: completedChapters.join(', ') || 'None',
     });
 
