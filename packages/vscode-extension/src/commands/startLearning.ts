@@ -176,6 +176,13 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
         if (allChapters.length > 0) {
           const panel = LearningPanel.show(context.extensionUri, session);
           panel.loadChapter(allChapters[0].id);
+
+          // Start background prefetching for current track's chapters
+          const currentTrackChapters = allChapters
+            .filter(c => c.trackId === selectedTracks[0].id)
+            .sort((a, b) => a.order - b.order)
+            .map(c => c.id);
+          panel.startPrefetchQueue(currentTrackChapters);
         }
       }
     );
