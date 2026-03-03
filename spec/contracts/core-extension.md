@@ -115,7 +115,9 @@ type ExtensionToWebviewMessage =
   | { type: 'chapter:skeleton'; chapterId: string; skeleton: ChapterSkeleton }
   | { type: 'prefetch:progress'; done: number; total: number }
   | { type: 'init:analyzing'; repoPath: string }
-  | { type: 'init:planning'; trackCount: number };
+  | { type: 'init:planning'; trackCount: number }
+  | { type: 'chapter:states'; states: Record<string, 'ready'|'loading'|'queued'> }
+  | { type: 'chapter:outline'; chapterId: string; outline: ChapterOutline };
 ```
 
 ### Webview → Extension
@@ -129,7 +131,8 @@ type WebviewToExtensionMessage =
   | { type: 'question:ask'; question: string }
   | { type: 'navigate'; chapterId: string }
   | { type: 'tracks:selected'; trackIds: string[] }
-  | { type: 'openFile'; file: string; line?: number };
+  | { type: 'openFile'; file: string; line?: number }
+  | { type: 'track:switched'; trackId: string };
 ```
 
 ## Session State

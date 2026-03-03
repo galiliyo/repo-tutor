@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 import { marked } from 'marked';
-import { Chapter, ChapterContent, Question, Evaluation, Answer, Track } from '@repo-tutor/core';
+import { Chapter, ChapterContent, ChapterOutline, Question, Evaluation, Answer, Track } from '@repo-tutor/core';
 
 const md = (text: string): string => marked.parse(text) as string;
 
@@ -65,7 +65,9 @@ type ExtensionToWebviewMessage =
   | { type: 'chapter:skeleton'; chapterId: string; skeleton: ChapterSkeleton }
   | { type: 'prefetch:progress'; done: number; total: number }
   | { type: 'init:analyzing'; repoPath: string }
-  | { type: 'init:planning'; trackCount: number };
+  | { type: 'init:planning'; trackCount: number }
+  | { type: 'chapter:states'; states: Record<string, 'ready' | 'loading' | 'queued'> }
+  | { type: 'chapter:outline'; chapterId: string; outline: ChapterOutline };
 
 type WebviewToExtensionMessage =
   | { type: 'ready' }
@@ -75,7 +77,8 @@ type WebviewToExtensionMessage =
   | { type: 'quiz:more'; chapterId: string }
   | { type: 'question:ask'; question: string }
   | { type: 'navigate'; chapterId: string }
-  | { type: 'openFile'; file: string; line?: number };
+  | { type: 'openFile'; file: string; line?: number }
+  | { type: 'track:switched'; trackId: string };
 
 export class LearningPanel {
   public static currentPanel: LearningPanel | undefined;
