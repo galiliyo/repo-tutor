@@ -13,6 +13,7 @@ import type {
   BudgetConfig,
 } from '../types';
 import { buildInterfaceArtifact } from './interface-artifact';
+import { classifyFileTrack } from '../analysis/track-detector';
 
 const DEFAULT_BUDGET: BudgetConfig = {
   totalBudget: 120_000,
@@ -235,7 +236,25 @@ export class EvidenceBuilder {
     }
 
     const budgetUsed = files.reduce((sum, f) => sum + f.content.length, 0);
-    const interfaceArtifact = buildInterfaceArtifact(analysis);
+
+    // Filter analysis by track so the LLM only sees relevant modules/frameworks
+    const trackId = chapter.trackId;
+    let filteredAnalysis = analysis;
+    if (trackId && trackId !== 'architecture') {
+      const matchesTrack = (p: string) => {
+        const cls = classifyFileTrack(p);
+        return cls === trackId || cls === 'shared';
+      };
+      filteredAnalysis = {
+        ...analysis,
+        modules: (analysis.modules || []).filter(m => matchesTrack(m.path)),
+        entryPoints: (analysis.entryPoints || []).filter(ep => matchesTrack(ep.path)),
+        detectedTracks: (analysis.detectedTracks || []).filter(t => t.id === trackId),
+        http: trackId === 'frontend' ? undefined : analysis.http,
+        stateManagement: trackId === 'backend' ? undefined : analysis.stateManagement,
+      };
+    }
+    const interfaceArtifact = buildInterfaceArtifact(filteredAnalysis);
 
     return {
       chapterId: chapter.id,

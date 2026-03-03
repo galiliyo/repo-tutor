@@ -216,6 +216,12 @@ export class LearningPanel {
   }
 
   private async _loadChapter(chapterId: string) {
+    // If cached (e.g. from prefetch), skip skeleton and serve immediately
+    const cached = this._generatedContent.get(chapterId);
+    if (cached) {
+      return this._renderAndSend(chapterId, cached);
+    }
+
     this._postMessage({ type: 'chapter:loading', chapterId });
 
     // Send skeleton immediately from planner data + analysis
@@ -255,54 +261,49 @@ export class LearningPanel {
     }
 
     try {
-      // Check cache
-      let content = this._generatedContent.get(chapterId);
-
-      if (!content) {
-        const chapter = this._session.chapters.find((c) => c.id === chapterId);
-        if (!chapter) {
-          throw new Error(`Chapter not found: ${chapterId}`);
-        }
-
-        // Promote: remove from prefetch queue if queued
-        this._prefetchQueue = this._prefetchQueue.filter(id => id !== chapterId);
-
-        // If already inflight from prefetch, wait for it
-        if (this._inflight.has(chapterId)) {
-          while (this._inflight.has(chapterId)) {
-            await new Promise(r => setTimeout(r, 200));
-          }
-          content = this._generatedContent.get(chapterId);
-        }
-
-        if (!content) {
-          const core = getCoreAdapter();
-          const analysisResult = this._session.analysisResult;
-          const userContext = getDefaultUserContext();
-
-          content = await core.generateChapter(chapter, analysisResult, userContext);
-          this._generatedContent.set(chapterId, content);
-        }
+      const chapter = this._session.chapters.find((c) => c.id === chapterId);
+      if (!chapter) {
+        throw new Error(`Chapter not found: ${chapterId}`);
       }
 
-      // Build set of known file paths from analysis for linkification
-      const knownFiles = new Set<string>(
-        (this._session.analysisResult.dependencyGraph?.nodes ?? []).map((n) => n.path)
-      );
+      // Promote: remove from prefetch queue if queued
+      this._prefetchQueue = this._prefetchQueue.filter(id => id !== chapterId);
 
-      // Pre-render markdown to HTML, then linkify file paths into clickable refs
-      const rendered = {
-        ...content,
-        sections: content.sections.map((s) => ({
-          ...s,
-          content: linkifyFilePaths(md(s.content), knownFiles),
-        })),
-      };
-      this._postMessage({ type: 'chapter:loaded', chapter: rendered });
+      let content: ChapterContent | undefined;
+
+      // If already inflight from prefetch, wait for it
+      if (this._inflight.has(chapterId)) {
+        while (this._inflight.has(chapterId)) {
+          await new Promise(r => setTimeout(r, 200));
+        }
+        content = this._generatedContent.get(chapterId);
+      }
+
+      if (!content) {
+        const core = getCoreAdapter();
+        content = await core.generateChapter(chapter, this._session.analysisResult, getDefaultUserContext());
+        this._generatedContent.set(chapterId, content);
+      }
+
+      this._renderAndSend(chapterId, content);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this._postMessage({ type: 'chapter:error', chapterId, error: errorMessage });
     }
+  }
+
+  private _renderAndSend(chapterId: string, content: ChapterContent): void {
+    const knownFiles = new Set<string>(
+      (this._session.analysisResult.dependencyGraph?.nodes ?? []).map((n) => n.path)
+    );
+    const rendered = {
+      ...content,
+      sections: content.sections.map((s) => ({
+        ...s,
+        content: linkifyFilePaths(md(s.content), knownFiles),
+      })),
+    };
+    this._postMessage({ type: 'chapter:loaded', chapter: rendered });
   }
 
   private async _prefetchChapter(chapterId: string): Promise<void> {
