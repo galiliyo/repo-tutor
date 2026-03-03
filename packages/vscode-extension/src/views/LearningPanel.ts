@@ -300,11 +300,23 @@ export class LearningPanel {
 
       if (!content) {
         const core = getCoreAdapter();
-        content = await core.generateChapter(chapter, this._session.analysisResult, getDefaultUserContext());
+        const userContext = getDefaultUserContext();
+
+        // Pass 1: Quick outline
+        try {
+          const outline = await core.generateChapterOutline(chapter, this._session.analysisResult, userContext);
+          this._postMessage({ type: 'chapter:outline', chapterId, outline });
+        } catch {
+          // Outline failure is non-fatal, continue to full generation
+        }
+
+        // Pass 2: Full content
+        content = await core.generateChapter(chapter, this._session.analysisResult, userContext);
         this._generatedContent.set(chapterId, content);
       }
 
       this._renderAndSend(chapterId, content);
+      this._sendChapterStates();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this._postMessage({ type: 'chapter:error', chapterId, error: errorMessage });
