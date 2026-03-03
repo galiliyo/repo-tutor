@@ -22,6 +22,7 @@ export interface Chapter {
   prerequisites: string[];
   learningObjectives: string[];
   estimatedComplexity?: 'low' | 'medium' | 'high';
+  trackId?: string;
 }
 
 export interface CodeReference {
