@@ -945,6 +945,26 @@ export class LearningPanel {
     @keyframes blink {
       50% { opacity: 0; }
     }
+    .chapter-list li.queued { opacity: 0.5; }
+    .chapter-list li.ch-loading { opacity: 0.8; }
+    .status-icon {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      display: inline-block;
+      text-align: center;
+      line-height: 14px;
+      font-size: 12px;
+    }
+    .status-icon.spinner {
+      border: 2px solid var(--vscode-descriptionForeground);
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 1s linear infinite;
+    }
+    .status-icon.ready {
+      color: var(--vscode-testing-iconPassed);
+    }
   </style>
 </head>
 <body>
@@ -975,6 +995,7 @@ export class LearningPanel {
       answers: {},
       evaluations: {},
       streamedExplanations: {},
+      chapterStates: {},
     };
 
     const chapterListEl = document.getElementById('chapterList');
@@ -994,6 +1015,7 @@ export class LearningPanel {
         tab.textContent = track.label;
         tab.addEventListener('click', () => {
           state.currentTrackId = track.id;
+          vscode.postMessage({ type: 'track:switched', trackId: track.id });
           renderTrackTabs();
           renderChapterList();
         });
@@ -1010,8 +1032,17 @@ export class LearningPanel {
         .sort((a, b) => a.order - b.order)
         .map(ch => {
           const li = document.createElement('li');
-          li.className = ch.id === state.currentChapterId ? 'active' : '';
+          const chState = state.chapterStates[ch.id] || 'queued';
+          li.className = (ch.id === state.currentChapterId ? 'active' : '') +
+            (chState === 'queued' ? ' queued' : '') +
+            (chState === 'loading' ? ' ch-loading' : '');
           li.dataset.id = ch.id;
+
+          const icon = document.createElement('span');
+          icon.className = 'status-icon';
+          if (chState === 'loading') { icon.classList.add('spinner'); }
+          else if (chState === 'ready') { icon.classList.add('ready'); icon.textContent = '\\u2713'; }
+          li.appendChild(icon);
 
           const orderSpan = document.createElement('span');
           orderSpan.textContent = ch.order + '.';
@@ -1541,6 +1572,11 @@ export class LearningPanel {
           } else {
             indicator.textContent = 'Preparing chapters... ' + message.done + '/' + message.total;
           }
+          break;
+
+        case 'chapter:states':
+          state.chapterStates = message.states;
+          renderChapterList();
           break;
 
         case 'init:analyzing':
