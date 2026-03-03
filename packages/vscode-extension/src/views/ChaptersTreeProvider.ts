@@ -101,10 +101,20 @@ export class ChapterTreeItem extends vscode.TreeItem {
   }
 }
 
-export class ChaptersTreeProvider implements vscode.TreeDataProvider<ChapterTreeItem> {
-  private _onDidChangeTreeData: vscode.EventEmitter<ChapterTreeItem | undefined | null | void> =
-    new vscode.EventEmitter<ChapterTreeItem | undefined | null | void>();
-  readonly onDidChangeTreeData: vscode.Event<ChapterTreeItem | undefined | null | void> =
+class TrackTreeItem extends vscode.TreeItem {
+  constructor(public readonly track: Track) {
+    super(track.label, vscode.TreeItemCollapsibleState.Expanded);
+    this.description = track.description;
+    this.contextValue = 'track';
+  }
+}
+
+type TreeItem = ChapterTreeItem | TrackTreeItem;
+
+export class ChaptersTreeProvider implements vscode.TreeDataProvider<TreeItem> {
+  private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> =
+    new vscode.EventEmitter<TreeItem | undefined | null | void>();
+  readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> =
     this._onDidChangeTreeData.event;
 
   private session: SessionState | null = null;
@@ -142,28 +152,33 @@ export class ChaptersTreeProvider implements vscode.TreeDataProvider<ChapterTree
     return this.session;
   }
 
-  getTreeItem(element: ChapterTreeItem): vscode.TreeItem {
+  getTreeItem(element: TreeItem): vscode.TreeItem {
     return element;
   }
 
-  getChildren(element?: ChapterTreeItem): Thenable<ChapterTreeItem[]> {
-    if (element) {
-      // No nested items
-      return Promise.resolve([]);
-    }
-
+  getChildren(element?: TreeItem): Thenable<TreeItem[]> {
     if (!this.session || !this.session.chapters) {
       return Promise.resolve([]);
     }
 
-    const items = this.session.chapters
-      .sort((a, b) => a.order - b.order)
-      .map((chapter) => {
-        const status = this.getChapterStatus(chapter);
-        return new ChapterTreeItem(chapter, status);
-      });
+    // If multiple tracks, show track groups at top level
+    if (!element && this.session.selectedTrackIds?.length > 1) {
+      const trackItems = (this.session.detectedTracks || [])
+        .filter(t => this.session!.selectedTrackIds.includes(t.id))
+        .sort((a, b) => a.suggestedOrder - b.suggestedOrder)
+        .map(t => new TrackTreeItem(t));
+      return Promise.resolve(trackItems);
+    }
 
-    return Promise.resolve(items);
+    // Get chapters for the track (or all if single track / no element)
+    const trackId = element instanceof TrackTreeItem ? element.track.id : null;
+    const chapters = this.session.chapters
+      .filter(ch => !trackId || ch.trackId === trackId)
+      .sort((a, b) => a.order - b.order);
+
+    return Promise.resolve(
+      chapters.map(ch => new ChapterTreeItem(ch, this.getChapterStatus(ch)))
+    );
   }
 
   private getChapterStatus(chapter: Chapter): ChapterStatus {
