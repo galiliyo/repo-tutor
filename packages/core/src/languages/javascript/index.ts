@@ -1,244 +1,130 @@
 // packages/core/src/languages/javascript/index.ts
 
-import { Project, SourceFile, SyntaxKind, Node } from 'ts-morph';
+import * as fs from 'fs/promises';
 import type { LanguagePlugin, ASTNode, Import, Export, CodeSymbol } from '../plugin';
+
+const IMPORT_RE = /import\s+(?:(?:\*\s+as\s+(\w+))|(?:(\w+)(?:\s*,\s*\{([^}]*)\})?)|(?:\{([^}]*)\}))\s+from\s+['"]([^'"]+)['"]/g;
+const BARE_IMPORT_RE = /import\s+['"]([^'"]+)['"]/g;
+const EXPORT_NAMED_RE = /export\s+(?:function|class|const|let|var|interface|type)\s+(\w+)/g;
+const EXPORT_DEFAULT_RE = /export\s+default\s+/g;
+const REEXPORT_RE = /export\s+\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/g;
 
 export class JavaScriptPlugin implements LanguagePlugin {
   id = 'javascript';
   extensions = ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.mts'];
 
-  private project: Project;
-
-  constructor() {
-    this.project = new Project({
-      compilerOptions: {
-        allowJs: true,
-        checkJs: false,
-        noEmit: true,
-        skipLibCheck: true,
-      },
-      skipAddingFilesFromTsConfig: true,
-    });
-  }
-
   async parseFile(filePath: string): Promise<ASTNode> {
-    const sourceFile = this.project.addSourceFileAtPath(filePath);
-    const astNode = this.convertToASTNode(sourceFile);
-    // Store the filePath in the AST node for later lookup
-    astNode.filePath = filePath;
-    return astNode;
-  }
-
-  private convertToASTNode(node: Node): ASTNode {
+    const text = await fs.readFile(filePath, 'utf-8');
     return {
-      type: SyntaxKind[node.getKind()],
-      children: node.getChildren().map(child => this.convertToASTNode(child)),
-      text: node.getText(),
-      startPosition: {
-        row: node.getStartLineNumber() - 1,
-        column: node.getStart() - node.getStartLinePos(),
-      },
-      endPosition: {
-        row: node.getEndLineNumber() - 1,
-        column: 0,
-      },
+      type: 'SourceFile',
+      children: [],
+      text,
+      filePath,
+      _sourceText: text,
     };
   }
 
-  /**
-   * Gets the source file for the given AST and removes it from the project
-   * to prevent memory leaks.
-   */
-  private getAndRemoveSourceFile(ast: ASTNode): SourceFile | undefined {
-    if (!ast.filePath) {
-      return undefined;
-    }
-    const sourceFile = this.project.getSourceFile(ast.filePath);
-    if (sourceFile) {
-      // We'll remove the file after extraction in the calling method
-      return sourceFile;
-    }
-    return undefined;
-  }
-
   getImports(ast: ASTNode): Import[] {
-    const sourceFile = this.getAndRemoveSourceFile(ast);
-    if (!sourceFile) return [];
-
+    const text = ast._sourceText ?? '';
     const imports: Import[] = [];
+    let match: RegExpExecArray | null;
 
-    try {
-      for (const importDecl of sourceFile.getImportDeclarations()) {
-        const moduleSpecifier = importDecl.getModuleSpecifierValue();
-        const specifiers: string[] = [];
+    // Named / default / namespace imports
+    const re = new RegExp(IMPORT_RE.source, 'g');
+    while ((match = re.exec(text)) !== null) {
+      const [full, namespace, defaultImport, namedWithDefault, named, source] = match;
+      const specifiers: string[] = [];
 
-        const defaultImport = importDecl.getDefaultImport();
-        if (defaultImport) {
-          specifiers.push(defaultImport.getText());
+      if (namespace) specifiers.push('*');
+      if (defaultImport) specifiers.push(defaultImport);
+
+      const namedStr = namedWithDefault || named;
+      if (namedStr) {
+        for (const s of namedStr.split(',')) {
+          const trimmed = s.trim().split(/\s+as\s+/)[0].trim();
+          if (trimmed) specifiers.push(trimmed);
         }
-
-        const namespaceImport = importDecl.getNamespaceImport();
-        if (namespaceImport) {
-          specifiers.push('*');
-        }
-
-        for (const named of importDecl.getNamedImports()) {
-          specifiers.push(named.getName());
-        }
-
-        imports.push({
-          source: moduleSpecifier,
-          specifiers,
-          isRelative: moduleSpecifier.startsWith('.'),
-          line: importDecl.getStartLineNumber(),
-        });
       }
-    } finally {
-      // Remove the source file to prevent memory leak
-      this.project.removeSourceFile(sourceFile);
+
+      const line = text.substring(0, match.index).split('\n').length;
+      imports.push({
+        source,
+        specifiers,
+        isRelative: source.startsWith('.'),
+        line,
+      });
+    }
+
+    // Bare imports: import 'side-effect'
+    const bareRe = new RegExp(BARE_IMPORT_RE.source, 'g');
+    while ((match = bareRe.exec(text)) !== null) {
+      const source = match[1];
+      // Skip if already captured by the main regex
+      if (imports.some(i => i.source === source)) continue;
+      const line = text.substring(0, match.index).split('\n').length;
+      imports.push({ source, specifiers: [], isRelative: source.startsWith('.'), line });
     }
 
     return imports;
   }
 
   getExports(ast: ASTNode): Export[] {
-    const sourceFile = this.getAndRemoveSourceFile(ast);
-    if (!sourceFile) return [];
-
+    const text = ast._sourceText ?? '';
     const exports: Export[] = [];
+    let match: RegExpExecArray | null;
 
-    try {
-      for (const exportDecl of sourceFile.getExportDeclarations()) {
-        for (const named of exportDecl.getNamedExports()) {
-          exports.push({
-            name: named.getName(),
-            kind: 'reexport',
-            line: exportDecl.getStartLineNumber(),
-          });
-        }
+    // Re-exports
+    const reexportRe = new RegExp(REEXPORT_RE.source, 'g');
+    while ((match = reexportRe.exec(text)) !== null) {
+      const line = text.substring(0, match.index).split('\n').length;
+      for (const s of match[1].split(',')) {
+        const name = s.trim().split(/\s+as\s+/).pop()!.trim();
+        if (name) exports.push({ name, kind: 'reexport', line });
       }
+    }
 
-      for (const stmt of sourceFile.getStatements()) {
-        if (Node.isExportable(stmt) && stmt.hasExportKeyword()) {
-          if (Node.isFunctionDeclaration(stmt)) {
-            const name = stmt.getName();
-            if (name) {
-              exports.push({ name, kind: 'function', line: stmt.getStartLineNumber() });
-            }
-          } else if (Node.isClassDeclaration(stmt)) {
-            const name = stmt.getName();
-            if (name) {
-              exports.push({ name, kind: 'class', line: stmt.getStartLineNumber() });
-            }
-          } else if (Node.isVariableStatement(stmt)) {
-            for (const decl of stmt.getDeclarations()) {
-              exports.push({ name: decl.getName(), kind: 'variable', line: stmt.getStartLineNumber() });
-            }
-          } else if (Node.isInterfaceDeclaration(stmt)) {
-            exports.push({ name: stmt.getName(), kind: 'type', line: stmt.getStartLineNumber() });
-          } else if (Node.isTypeAliasDeclaration(stmt)) {
-            exports.push({ name: stmt.getName(), kind: 'type', line: stmt.getStartLineNumber() });
-          }
-        }
-      }
+    // Named exports
+    const namedRe = new RegExp(EXPORT_NAMED_RE.source, 'g');
+    while ((match = namedRe.exec(text)) !== null) {
+      const line = text.substring(0, match.index).split('\n').length;
+      const full = match[0];
+      let kind: Export['kind'] = 'variable';
+      if (full.includes('function')) kind = 'function';
+      else if (full.includes('class')) kind = 'class';
+      else if (full.includes('interface') || full.includes('type')) kind = 'type';
+      exports.push({ name: match[1], kind, line });
+    }
 
-      // Handle default exports
-      const defaultExport = sourceFile.getDefaultExportSymbol();
-      if (defaultExport) {
-        const declarations = defaultExport.getDeclarations();
-        if (declarations.length > 0) {
-          const decl = declarations[0];
-          exports.push({ name: 'default', kind: 'default', line: decl.getStartLineNumber() });
-        }
-      }
-    } finally {
-      // Remove the source file to prevent memory leak
-      this.project.removeSourceFile(sourceFile);
+    // Default export
+    const defaultRe = new RegExp(EXPORT_DEFAULT_RE.source, 'g');
+    while ((match = defaultRe.exec(text)) !== null) {
+      const line = text.substring(0, match.index).split('\n').length;
+      exports.push({ name: 'default', kind: 'default', line });
     }
 
     return exports;
   }
 
   getSymbols(ast: ASTNode): CodeSymbol[] {
-    const sourceFile = this.getAndRemoveSourceFile(ast);
-    if (!sourceFile) return [];
-
-    try {
-      return this.extractSymbols(sourceFile);
-    } finally {
-      // Remove the source file to prevent memory leak
-      this.project.removeSourceFile(sourceFile);
-    }
-  }
-
-  private extractSymbols(sourceFile: SourceFile): CodeSymbol[] {
+    const text = ast._sourceText ?? '';
     const symbols: CodeSymbol[] = [];
 
-    for (const func of sourceFile.getFunctions()) {
-      const name = func.getName();
-      if (name) {
-        symbols.push({
-          name,
-          kind: 'function',
-          line: func.getStartLineNumber(),
-          column: func.getStart() - func.getStartLinePos(),
-          signature: func.getSignature()?.getDeclaration().getText(),
-        });
-      }
-    }
+    const SYMBOL_RE = /(?:export\s+)?(?:default\s+)?(?:async\s+)?(function|class|interface|type|const|let|var)\s+(\w+)/g;
+    let match: RegExpExecArray | null;
 
-    for (const cls of sourceFile.getClasses()) {
-      const name = cls.getName();
-      if (name) {
-        const children: CodeSymbol[] = [];
+    while ((match = SYMBOL_RE.exec(text)) !== null) {
+      const [, keyword, name] = match;
+      const line = text.substring(0, match.index).split('\n').length;
+      const col = match.index - text.lastIndexOf('\n', match.index - 1) - 1;
 
-        for (const method of cls.getMethods()) {
-          children.push({
-            name: method.getName(),
-            kind: 'method',
-            line: method.getStartLineNumber(),
-            column: method.getStart() - method.getStartLinePos(),
-          });
-        }
+      let kind: CodeSymbol['kind'];
+      if (keyword === 'function') kind = 'function';
+      else if (keyword === 'class') kind = 'class';
+      else if (keyword === 'interface') kind = 'interface';
+      else if (keyword === 'type') kind = 'type';
+      else kind = 'variable';
 
-        symbols.push({
-          name,
-          kind: 'class',
-          line: cls.getStartLineNumber(),
-          column: cls.getStart() - cls.getStartLinePos(),
-          children,
-        });
-      }
-    }
-
-    for (const iface of sourceFile.getInterfaces()) {
-      symbols.push({
-        name: iface.getName(),
-        kind: 'interface',
-        line: iface.getStartLineNumber(),
-        column: iface.getStart() - iface.getStartLinePos(),
-      });
-    }
-
-    // Add type alias extraction
-    for (const typeAlias of sourceFile.getTypeAliases()) {
-      symbols.push({
-        name: typeAlias.getName(),
-        kind: 'type',
-        line: typeAlias.getStartLineNumber(),
-        column: typeAlias.getStart() - typeAlias.getStartLinePos(),
-      });
-    }
-
-    for (const varStmt of sourceFile.getVariableStatements()) {
-      for (const decl of varStmt.getDeclarations()) {
-        symbols.push({
-          name: decl.getName(),
-          kind: 'variable',
-          line: varStmt.getStartLineNumber(),
-          column: varStmt.getStart() - varStmt.getStartLinePos(),
-        });
-      }
+      symbols.push({ name, kind, line, column: col });
     }
 
     return symbols;

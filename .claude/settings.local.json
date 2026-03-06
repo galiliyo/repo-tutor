@@ -45,7 +45,9 @@
       "Bash(npx tsx:*)",
       "Bash(git -C:*)",
       "Bash(where python:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(esbuild:*)",
+      "Bash(npx esbuild:*)"
     ],
     "deny": [
       "Bash(git push --force*)",

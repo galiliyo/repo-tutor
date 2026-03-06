@@ -16,7 +16,6 @@
     "handlebars": "^4.7.0",
     "openai": "^4.0.0",
     "tree-sitter-python": "^0.21.0",
-    "ts-morph": "^22.0.0",
     "web-tree-sitter": "^0.22.0"
   },
   "devDependencies": {
