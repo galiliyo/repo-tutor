@@ -90,7 +90,7 @@ Previous chapters completed: {{completedChapters}}
 ## Modules
 
 {{#each interfaceArtifact.moduleMap}}
-- **{{name}}** (`{{path}}/`, {{fileCount}} files){{#if purpose}} — {{purpose}}{{/if}}
+- **{{name}}** [{{role}}] (`{{path}}/`, {{fileCount}} files){{#if purpose}} — {{purpose}}{{/if}}
 {{/each}}
 
 # Code Evidence
@@ -123,11 +123,11 @@ Dependencies:
 
 # Anti-Hallucination Rules
 
-1. **Only reference files shown in Code Evidence above.** If a file is not listed, do not mention it, speculate about its contents, or invent code from it.
+1. **Only reference files shown in Code Evidence above.** If a file is not listed, do not mention it, speculate about its contents, or invent code from it. Do NOT enumerate or describe files that appear only in the directory tree or module map — they are not evidence.
 2. **Only cite line numbers visible in the provided snippets.** If a file was truncated and you cannot see a specific line, say "not shown in the provided excerpt" rather than guessing.
 3. **Do not invent function signatures, variable names, or import paths.** Every code reference must correspond to actual content in the evidence above.
-4. **If evidence is insufficient to explain a concept fully**, state what you *can* see and note what is missing (e.g., "The full implementation of `handleAuth()` is not included in this chapter's evidence").
-5. **Directory tree and module map are structural metadata**, not proof that a file has specific content. Use them for orientation ("this lives in the `auth/` module") but not for code-level claims.
+4. **If evidence is insufficient to explain a concept fully**, state what you *can* see and note what is missing. Do not pad the chapter by listing files you haven't seen — skip them entirely.
+5. **Directory tree and module map are structural metadata**, not proof that a file has specific content. Use them for orientation ("this lives in the `auth/` module") but not for code-level claims. Never create a "file-by-file" walkthrough of files not in the evidence.
 
 # Task
 

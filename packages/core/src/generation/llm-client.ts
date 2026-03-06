@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import type { LLMConfig, Logger } from '../types';
 
-const noopLogger: Logger = { info() {}, warn() {}, error() {} };
+const noopLogger: Logger = { info() {}, warn() {}, error() {}, debug() {} };
 
 export interface LLMResponse {
   content: string;
@@ -15,8 +15,8 @@ export interface LLMResponse {
  * Interface for LLM completion - used for dependency injection and testing
  */
 export interface ILLMClient {
-  complete(prompt: string, systemPrompt?: string): Promise<LLMResponse>;
-  stream?(prompt: string, systemPrompt?: string): AsyncIterable<string>;
+  complete(prompt: string, systemPrompt?: string, tag?: string): Promise<LLMResponse>;
+  stream?(prompt: string, systemPrompt?: string, tag?: string): AsyncIterable<string>;
 }
 
 export class LLMClient implements ILLMClient {
@@ -50,25 +50,29 @@ export class LLMClient implements ILLMClient {
     }
   }
 
-  async complete(prompt: string, systemPrompt?: string): Promise<LLMResponse> {
+  async complete(prompt: string, systemPrompt?: string, tag?: string): Promise<LLMResponse> {
     if (!this.config) {
       throw new Error('LLM config not set');
     }
 
-    this.log.info(`► Request [${this.config.provider}/${this.config.model}]`);
-    if (systemPrompt) this.log.info(`  system: ${systemPrompt.slice(0, 200)}...`);
-    this.log.info(`  prompt: ${prompt.slice(0, 300)}...`);
+    const label = tag ? `${tag} ` : '';
+    this.log.info(`► ${label}[${this.config.provider}/${this.config.model}]`);
+    this.log.debug(`  system: ${systemPrompt?.slice(0, 500) ?? '(none)'}`);
+    this.log.debug(`  prompt: ${prompt.slice(0, 500)}`);
 
+    const start = Date.now();
     try {
       const result = this.config.provider === 'anthropic'
         ? await this.completeAnthropic(prompt, systemPrompt)
         : await this.completeOpenAI(prompt, systemPrompt);
 
-      this.log.info(`◄ Response (${result.tokensUsed} tokens, ${result.content.length} chars)`);
-      this.log.info(`  ${result.content.slice(0, 300)}...`);
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      this.log.info(`◄ ${label}${result.tokensUsed} tokens ${elapsed}s`);
+      this.log.debug(`  response: ${result.content.slice(0, 500)}`);
       return result;
     } catch (err: any) {
-      this.log.error(`✖ Error: ${err.message ?? err}`);
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      this.log.error(`✖ ${label}Error after ${elapsed}s: ${err.message ?? err}`);
       throw err;
     }
   }
@@ -108,29 +112,42 @@ export class LLMClient implements ILLMClient {
 
     const textContent = response.content.find(c => c.type === 'text');
 
+    const inputTokens = response.usage.input_tokens;
+    const outputTokens = response.usage.output_tokens;
+    this.log.debug(`  anthropic tokens: (${inputTokens}in + ${outputTokens}out)`);
+
     return {
       content: textContent?.text || '',
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      tokensUsed: inputTokens + outputTokens,
     };
   }
 
-  async *stream(prompt: string, systemPrompt?: string): AsyncIterable<string> {
+  async *stream(prompt: string, systemPrompt?: string, tag?: string): AsyncIterable<string> {
     if (!this.config) {
       throw new Error('LLM config not set');
     }
 
-    this.log.info(`► Stream [${this.config.provider}/${this.config.model}]`);
+    const label = tag ? `${tag} ` : '';
+    this.log.info(`► ${label}stream [${this.config.provider}/${this.config.model}]`);
+    this.log.debug(`  prompt: ${prompt.slice(0, 500)}`);
 
+    const start = Date.now();
+    let chars = 0;
     try {
       const iterable = this.config.provider === 'anthropic'
         ? this.streamAnthropic(prompt, systemPrompt)
         : this.streamOpenAI(prompt, systemPrompt);
 
       for await (const chunk of iterable) {
+        chars += chunk.length;
         yield chunk;
       }
+
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      this.log.info(`◄ ${label}stream done ${chars} chars ${elapsed}s`);
     } catch (err: any) {
-      this.log.error(`✖ Stream error: ${err.message ?? err}`);
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      this.log.error(`✖ ${label}Stream error after ${elapsed}s: ${err.message ?? err}`);
       throw err;
     }
   }

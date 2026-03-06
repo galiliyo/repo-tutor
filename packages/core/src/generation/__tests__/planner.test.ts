@@ -117,7 +117,7 @@ describe('Planner', () => {
 
     await planner.plan(analysis, userContext);
 
-    expect(mockLLMClient.complete).toHaveBeenCalledWith('the rendered prompt');
+    expect(mockLLMClient.complete).toHaveBeenCalledWith('the rendered prompt', undefined, 'planner');
   });
 
   it('should handle JSON response without code fence', async () => {
@@ -353,6 +353,111 @@ describe('Planner', () => {
     expect(patternNames).toContain('Express middleware stack');
     expect(patternNames).toContain('Singleton'); // generic, not FE-specific
     expect(patternNames).not.toContain('React component composition');
+  });
+
+  it('should filter dependency graph nodes/edges/layers by track', async () => {
+    const analysis = createMockAnalysis();
+    analysis.dependencyGraph = {
+      nodes: [
+        { path: 'src/routes/api.ts', language: 'typescript', loc: 80 },
+        { path: 'src/components/Button.tsx', language: 'typescript', loc: 40 },
+        { path: 'src/utils/helpers.ts', language: 'typescript', loc: 20 },
+      ],
+      edges: [
+        { from: 'src/routes/api.ts', to: 'src/utils/helpers.ts', weight: 1 },
+        { from: 'src/components/Button.tsx', to: 'src/utils/helpers.ts', weight: 1 },
+      ],
+      layers: [['src/routes/api.ts', 'src/components/Button.tsx'], ['src/utils/helpers.ts']],
+    };
+    analysis.modules = [
+      { name: 'routes', path: 'src/routes', fileCount: 3 },
+    ];
+    analysis.entryPoints = [{ path: 'src/routes/api.ts', reason: 'http' }];
+
+    const backendTrack: Track = {
+      id: 'backend',
+      label: 'Backend',
+      description: 'Server-side',
+      focusTypes: ['http'],
+      confidence: 0.8,
+      suggestedOrder: 3,
+    };
+
+    let capturedVars: any;
+    const mockLLMClient: ILLMClient = {
+      complete: vi.fn().mockResolvedValue({
+        content: '{"chapters": []}',
+        tokensUsed: 50,
+      } as LLMResponse),
+    };
+    const mockPromptLoader: IPromptLoader = {
+      load: vi.fn().mockImplementation((_name: string, vars: any) => {
+        capturedVars = vars;
+        return 'mocked prompt';
+      }),
+    };
+
+    const planner = new Planner(mockLLMClient, mockPromptLoader);
+    await planner.plan(analysis, createMockUserContext(), backendTrack);
+
+    // Frontend file (src/components/Button.tsx) should be excluded from layers
+    const layers = capturedVars.dependencyLayers;
+    expect(layers).toContain('src/routes/api.ts');
+    expect(layers).toContain('src/utils/helpers.ts');
+    expect(layers).not.toContain('src/components/Button.tsx');
+  });
+
+  it('should filter module files by track using fileTrackMap', async () => {
+    const analysis = createMockAnalysis();
+    // 'app' module contains mostly backend files, but also a frontend file
+    analysis.modules = [
+      { name: 'app', path: 'app', description: 'FastAPI app', fileCount: 4,
+        files: ['app/main.py', 'app/models.py', 'app/routes.py', 'app/static/app.js'] },
+      { name: 'static', path: 'static', description: 'Frontend assets', fileCount: 2,
+        files: ['static/index.html', 'static/style.css'] },
+    ];
+    analysis.fileTrackMap = new Map([
+      ['app/main.py', 'backend'],
+      ['app/models.py', 'backend'],
+      ['app/routes.py', 'backend'],
+      ['app/static/app.js', 'frontend'],
+      ['static/index.html', 'frontend'],
+      ['static/style.css', 'frontend'],
+    ]);
+
+    const frontendTrack: Track = {
+      id: 'frontend',
+      label: 'Frontend',
+      description: 'UI layer',
+      focusTypes: ['state-management', 'pattern'],
+      confidence: 0.7,
+      suggestedOrder: 2,
+    };
+
+    let capturedVars: any;
+    const mockLLMClient: ILLMClient = {
+      complete: vi.fn().mockResolvedValue({
+        content: '{"chapters": []}',
+        tokensUsed: 50,
+      } as LLMResponse),
+    };
+    const mockPromptLoader: IPromptLoader = {
+      load: vi.fn().mockImplementation((_name: string, vars: any) => {
+        capturedVars = vars;
+        return 'mocked prompt';
+      }),
+    };
+
+    const planner = new Planner(mockLLMClient, mockPromptLoader);
+    await planner.plan(analysis, createMockUserContext(), frontendTrack);
+
+    const moduleNames = capturedVars.modules.map((m: any) => m.name);
+    // 'app' module still included but only with its frontend file
+    expect(moduleNames).toContain('app');
+    expect(moduleNames).toContain('static');
+    const appModule = capturedVars.modules.find((m: any) => m.name === 'app');
+    expect(appModule.files).toEqual(['app/static/app.js']);
+    expect(appModule.fileCount).toBe(1);
   });
 
   it('should not filter patterns for architecture track', async () => {

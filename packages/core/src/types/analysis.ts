@@ -26,8 +26,10 @@ export interface Module {
   path: string;
   description?: string;
   fileCount?: number;
+  files?: string[];
   importCount?: number;
   exportCount?: number;
+  role?: 'source' | 'test';
 }
 
 export interface PatternDetection {

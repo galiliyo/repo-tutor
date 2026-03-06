@@ -132,7 +132,7 @@ describe('QuizEvaluator', () => {
 
     await evaluator.evaluate(question, 'src/index.ts');
 
-    expect(mockLLMClient.complete).toHaveBeenCalledWith('the evaluator prompt');
+    expect(mockLLMClient.complete).toHaveBeenCalledWith('the evaluator prompt', undefined, 'evaluator');
   });
 
   it('should handle JSON response without code fence', async () => {

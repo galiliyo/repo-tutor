@@ -1,7 +1,7 @@
 // packages/core/src/analysis/__tests__/track-detector.test.ts
 
 import { describe, it, expect } from 'vitest';
-import { detectTracks, classifyFileTrack, classifyFile } from '../track-detector';
+import { detectTracks, classifyFileTrack, classifyFile, inferDirectoryTracks, fileMatchesDir } from '../track-detector';
 import type { AnalysisResult, TrackId } from '../../types';
 
 function stubAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
@@ -150,6 +150,21 @@ describe('detectTracks', () => {
     expect(be.confidence).toBeGreaterThanOrEqual(0.3);
   });
 
+  it('infers app/ as backend from sampled Python files', async () => {
+    const files = ['app/main.py', 'app/utils.py', 'app/models.py', 'static/app.js'];
+    const contents = new Map([
+      ['app/main.py', "from flask import Flask\napp = Flask(__name__)\n@app.route('/')\ndef index(): return 'hi'"],
+      ['static/app.js', "document.querySelector('#app').innerHTML = '<h1>Hello</h1>';"],
+    ]);
+    const { fileTrackMap } = await detectTracks('/fake', files, stubAnalysis(), contents);
+    // app/main.py classified by content, app/utils.py + app/models.py inferred
+    expect(fileTrackMap.get('app/main.py')).toBe('backend');
+    expect(fileTrackMap.get('app/utils.py')).toBe('backend');
+    expect(fileTrackMap.get('app/models.py')).toBe('backend');
+    // static/app.js correctly frontend
+    expect(fileTrackMap.get('static/app.js')).toBe('frontend');
+  });
+
   it('architecture confidence scales with module count', async () => {
     const fewModules = stubAnalysis({
       modules: [
@@ -237,9 +252,80 @@ describe('classifyFileTrack', () => {
   });
 });
 
+describe('inferDirectoryTracks', () => {
+  it('infers backend for app/ when sampled files are backend', () => {
+    const files = ['app/main.py', 'app/utils.py', 'app/helpers.py'];
+    const map = new Map<string, TrackId>([['app/main.py', 'backend']]);
+    inferDirectoryTracks(files, map);
+    expect(map.get('app/utils.py')).toBe('backend');
+    expect(map.get('app/helpers.py')).toBe('backend');
+  });
+
+  it('infers frontend for static/ when sampled files are frontend', () => {
+    const files = ['static/app.js', 'static/styles.css', 'static/logo.png'];
+    const map = new Map<string, TrackId>([['static/app.js', 'frontend']]);
+    inferDirectoryTracks(files, map);
+    expect(map.get('static/styles.css')).toBe('frontend');
+    expect(map.get('static/logo.png')).toBe('frontend');
+  });
+
+  it('does not override already-classified files', () => {
+    const files = ['app/main.py', 'app/client.tsx'];
+    const map = new Map<string, TrackId>([
+      ['app/main.py', 'backend'],
+      ['app/client.tsx', 'frontend'],
+    ]);
+    inferDirectoryTracks(files, map);
+    expect(map.get('app/client.tsx')).toBe('frontend');
+  });
+
+  it('does not infer when dir is mixed below threshold', () => {
+    const files = ['mixed/a.py', 'mixed/b.tsx', 'mixed/c.ts'];
+    // 1 backend, 1 frontend — 50% each, below 60% threshold
+    const map = new Map<string, TrackId>([
+      ['mixed/a.py', 'backend'],
+      ['mixed/b.tsx', 'frontend'],
+    ]);
+    inferDirectoryTracks(files, map);
+    expect(map.has('mixed/c.ts')).toBe(false);
+  });
+
+  it('skips root-level files', () => {
+    const files = ['README.md', 'app/main.py'];
+    const map = new Map<string, TrackId>([['app/main.py', 'backend']]);
+    inferDirectoryTracks(files, map);
+    expect(map.has('README.md')).toBe(false);
+  });
+});
+
+describe('fileMatchesDir', () => {
+  it('matches top-level dir', () => {
+    expect(fileMatchesDir('static/app.js', 'static/')).toBe(true);
+    expect(fileMatchesDir('src/components/Button.tsx', 'src/components')).toBe(true);
+  });
+
+  it('matches nested dir segment', () => {
+    expect(fileMatchesDir('app/static/app.js', 'static/')).toBe(true);
+    expect(fileMatchesDir('server/public/index.html', 'public/')).toBe(true);
+  });
+
+  it('does not match partial segment names', () => {
+    expect(fileMatchesDir('app/statistics/data.py', 'static/')).toBe(false);
+  });
+
+  it('handles backslashes', () => {
+    expect(fileMatchesDir('app\\static\\app.js', 'static/')).toBe(true);
+  });
+});
+
 describe('classifyFile', () => {
   it('classifies by FE directory', () => {
     expect(classifyFile('src/components/Button.tsx')).toBe('frontend');
+  });
+
+  it('classifies nested static/ as frontend', () => {
+    expect(classifyFile('app/static/app.js')).toBe('frontend');
+    expect(classifyFile('server/public/index.html')).toBe('frontend');
   });
 
   it('classifies by BE directory', () => {

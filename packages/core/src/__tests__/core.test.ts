@@ -48,7 +48,7 @@ describe('RepoTutorCore', () => {
       });
 
       expect(result.repoPath).toBe(tmpDir);
-      expect(result.languages).toContain('javascript');
+      expect(result.languages).toContain('typescript');
       expect(result.entryPoints.length).toBeGreaterThan(0);
     } finally {
       await fs.rm(tmpDir, { recursive: true });

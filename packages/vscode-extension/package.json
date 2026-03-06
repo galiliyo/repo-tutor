@@ -91,6 +91,11 @@
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Ollama server URL"
+        },
+        "repoTutor.logging.verbose": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log full LLM prompts and responses (for debugging)"
         }
       }
     },

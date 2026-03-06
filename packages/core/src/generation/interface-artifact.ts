@@ -127,5 +127,6 @@ function buildModuleMap(analysis: AnalysisResult): ModuleMapEntry[] {
     path: m.path,
     fileCount: m.fileCount ?? 0,
     purpose: m.description,
+    role: m.role,
   }));
 }

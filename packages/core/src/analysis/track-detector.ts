@@ -52,6 +52,7 @@ export const FE_FRAMEWORK_IMPORTS = [
 ];
 
 export const FE_DIRS = [
+  'frontend/', 'client/', 'web/',
   'src/components', 'src/pages', 'src/views', 'src/hooks', 'src/stores', 'public/', 'static/',
 ];
 
@@ -78,6 +79,7 @@ export const BE_FRAMEWORK_IMPORTS = [
 ];
 
 export const BE_DIRS = [
+  'backend/', 'server/', 'api/',
   'src/routes', 'src/controllers', 'src/middleware', 'src/models',
   'src/services', 'src/api', 'src/handlers',
   // Python
@@ -204,11 +206,10 @@ function containsAny(content: string, patterns: string[]): boolean {
 export function fileMatchesDir(file: string, dir: string): boolean {
   const normalized = file.replace(/\\/g, '/');
   const normalizedDir = dir.replace(/\\/g, '/');
-  // "public/" matches files under public/
-  if (normalizedDir.endsWith('/')) {
-    return normalized.startsWith(normalizedDir) || normalized.startsWith(normalizedDir.slice(0, -1) + '/');
-  }
-  return normalized.startsWith(normalizedDir + '/');
+  // Normalize to "dir/" form
+  const segment = normalizedDir.endsWith('/') ? normalizedDir : normalizedDir + '/';
+  // Match as prefix (top-level) or as nested segment ("/static/" inside "app/static/app.js")
+  return normalized.startsWith(segment) || normalized.includes('/' + segment);
 }
 
 export function classifyFile(filePath: string, content?: string): TrackId | null {
@@ -430,6 +431,70 @@ function scoreInfra(files: string[]): number {
   return cap(score);
 }
 
+// ── Directory inference ──
+
+/** Minimum fraction of classified files in a dir that must agree for inference. */
+const DIR_INFERENCE_THRESHOLD = 0.6;
+/** Minimum number of classified files needed to infer a directory's track. */
+const DIR_INFERENCE_MIN_FILES = 1;
+
+function getTopDir(filePath: string): string | null {
+  const normalized = filePath.replace(/\\/g, '/');
+  const firstSlash = normalized.indexOf('/');
+  if (firstSlash < 0) return null; // root-level file
+  return normalized.slice(0, firstSlash);
+}
+
+/**
+ * Groups classified files by top-level directory, infers a dominant track
+ * per directory, then fills in unclassified files from that directory.
+ * Mutates fileTrackMap in place.
+ */
+export function inferDirectoryTracks(
+  files: string[],
+  fileTrackMap: Map<string, TrackId>,
+): void {
+  // Count track occurrences per top-level dir (only from already-classified files)
+  const dirCounts = new Map<string, Map<TrackId, number>>();
+  for (const [file, track] of fileTrackMap) {
+    const dir = getTopDir(file);
+    if (!dir) continue;
+    let counts = dirCounts.get(dir);
+    if (!counts) {
+      counts = new Map();
+      dirCounts.set(dir, counts);
+    }
+    counts.set(track, (counts.get(track) ?? 0) + 1);
+  }
+
+  // Determine dominant track per directory
+  const dirTrackMap = new Map<string, TrackId>();
+  for (const [dir, counts] of dirCounts) {
+    let total = 0;
+    let best: TrackId = 'architecture';
+    let bestCount = 0;
+    for (const [track, count] of counts) {
+      total += count;
+      if (count > bestCount) {
+        bestCount = count;
+        best = track;
+      }
+    }
+    if (total >= DIR_INFERENCE_MIN_FILES && bestCount / total >= DIR_INFERENCE_THRESHOLD) {
+      dirTrackMap.set(dir, best);
+    }
+  }
+
+  // Apply inferred directory tracks to unclassified files
+  for (const file of files) {
+    if (fileTrackMap.has(file)) continue;
+    const dir = getTopDir(file);
+    if (!dir) continue;
+    const inferred = dirTrackMap.get(dir);
+    if (inferred) fileTrackMap.set(file, inferred);
+  }
+}
+
 // ── Main ──
 
 export async function detectTracks(
@@ -454,12 +519,15 @@ export async function detectTracks(
     infra: round2(scoreInfra(files)),
   };
 
-  // Build file-to-track map
+  // Build file-to-track map from content-classified files
   const fileTrackMap = new Map<string, TrackId>();
   for (const file of files) {
     const track = classifyFile(file, contents.get(file));
     if (track) fileTrackMap.set(file, track);
   }
+
+  // Infer directory tracks from classified files, then apply to unclassified ones
+  inferDirectoryTracks(files, fileTrackMap);
 
   // Build all tracks — UI decides which to suggest (>= 0.3) vs show dimmed
   return {

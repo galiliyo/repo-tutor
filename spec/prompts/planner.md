@@ -35,8 +35,13 @@ State management: {{stateManagement.type}}
 
 Module summary:
 {{#each modules}}
-- {{name}}: {{description}} ({{fileCount}} files, imports: {{importCount}})
+- {{name}} [{{role}}]: {{description}} ({{fileCount}} files, imports: {{importCount}})
+{{#if files}}
+  Files: {{#each files}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}
 {{/each}}
+
+Note: Modules marked [test] provide context about how the code is used and tested, but are not architectural components. Do not treat them as top-level structural units or dedicate chapters to them.
 
 Dependency layers (from entry to leaf):
 {{dependencyLayers}}
@@ -54,6 +59,7 @@ Create a chapter outline that teaches this codebase progressively.
 5. Include HTTP/API chapter if routes exist
 6. Include state management chapter if state patterns detected
 7. Limit to 5-8 chapters for MVP scope
+8. **targetFiles MUST only contain actual file paths listed above** (in module Files lists, entry points, or dependency layers). Never invent or guess file paths.
 
 ## Chapter Focus Types
 

@@ -36,4 +36,5 @@ export interface ModuleMapEntry {
   path: string;
   fileCount: number;
   purpose?: string;
+  role?: 'source' | 'test';
 }

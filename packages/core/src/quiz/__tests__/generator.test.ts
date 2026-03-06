@@ -145,7 +145,7 @@ describe('QuizGenerator', () => {
 
     await generator.generate(chapter);
 
-    expect(mockLLMClient.complete).toHaveBeenCalledWith('the quiz prompt');
+    expect(mockLLMClient.complete).toHaveBeenCalledWith('the quiz prompt', undefined, 'quiz');
   });
 
   it('should handle JSON response without code fence', async () => {

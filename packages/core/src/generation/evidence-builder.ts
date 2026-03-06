@@ -230,7 +230,19 @@ export class EvidenceBuilder {
 
   async build(chapter: Chapter, analysis: AnalysisResult, budget?: BudgetConfig): Promise<EvidencePack> {
     const config = budget ?? this.config;
-    const tiered = classifyTiers(chapter, analysis.dependencyGraph);
+
+    // Filter targetFiles by track — drop files belonging to a different track
+    let filteredChapter = chapter;
+    const trackId = chapter.trackId;
+    if (trackId && trackId !== 'architecture') {
+      const filtered = chapter.targetFiles.filter(f => {
+        const cls = classifyFileTrack(f, analysis.fileTrackMap);
+        return cls === trackId || cls === 'shared';
+      });
+      filteredChapter = { ...chapter, targetFiles: filtered };
+    }
+
+    const tiered = classifyTiers(filteredChapter, analysis.dependencyGraph);
     const budgeted = allocateBudgets(tiered, config);
 
     const fileResults = await Promise.all(
@@ -251,18 +263,26 @@ export class EvidenceBuilder {
     const budgetUsed = files.reduce((sum, f) => sum + f.content.length, 0);
 
     // Filter analysis by track so the LLM only sees relevant modules/frameworks
-    const trackId = chapter.trackId;
     let filteredAnalysis = analysis;
     if (trackId && trackId !== 'architecture') {
       const matchesTrack = (p: string) => {
         const cls = classifyFileTrack(p, analysis.fileTrackMap);
         return cls === trackId || cls === 'shared';
       };
+      const graph = analysis.dependencyGraph;
+      const allowedNodes = new Set(
+        (graph?.nodes || []).filter(n => matchesTrack(n.path)).map(n => n.path),
+      );
       filteredAnalysis = {
         ...analysis,
         modules: (analysis.modules || []).filter(m => matchesTrack(m.path)),
         entryPoints: (analysis.entryPoints || []).filter(ep => matchesTrack(ep.path)),
         detectedTracks: (analysis.detectedTracks || []).filter(t => t.id === trackId),
+        dependencyGraph: {
+          nodes: (graph?.nodes || []).filter(n => allowedNodes.has(n.path)),
+          edges: (graph?.edges || []).filter(e => allowedNodes.has(e.from) && allowedNodes.has(e.to)),
+          layers: graph?.layers?.map(l => l.filter(f => allowedNodes.has(f))).filter(l => l.length > 0),
+        },
         http: trackId === 'frontend' ? undefined : analysis.http,
         stateManagement: trackId === 'backend' ? undefined : analysis.stateManagement,
       };

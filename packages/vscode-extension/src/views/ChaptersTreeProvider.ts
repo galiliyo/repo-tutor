@@ -118,6 +118,7 @@ export class ChaptersTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     this._onDidChangeTreeData.event;
 
   private session: SessionState | null = null;
+  private _sessionGen = 0;
 
   constructor(private context: vscode.ExtensionContext) {
     // Load session from workspace state
@@ -144,6 +145,7 @@ export class ChaptersTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
   clearSession(): void {
     this.session = null;
+    this._sessionGen++;
     this.context.workspaceState.update('repoTutor.session', undefined);
     this._onDidChangeTreeData.fire();
   }
@@ -163,10 +165,15 @@ export class ChaptersTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
     // If multiple tracks, show track groups at top level
     if (!element && this.session.selectedTrackIds?.length > 1) {
+      const gen = this._sessionGen;
       const trackItems = (this.session.detectedTracks || [])
         .filter(t => this.session!.selectedTrackIds.includes(t.id))
         .sort((a, b) => a.suggestedOrder - b.suggestedOrder)
-        .map(t => new TrackTreeItem(t));
+        .map(t => {
+          const item = new TrackTreeItem(t);
+          item.id = `s${gen}:track:${t.id}`;
+          return item;
+        });
       return Promise.resolve(trackItems);
     }
 
@@ -176,8 +183,13 @@ export class ChaptersTreeProvider implements vscode.TreeDataProvider<TreeItem> {
       .filter(ch => !trackId || ch.trackId === trackId)
       .sort((a, b) => a.order - b.order);
 
+    const gen = this._sessionGen;
     return Promise.resolve(
-      chapters.map(ch => new ChapterTreeItem(ch, this.getChapterStatus(ch)))
+      chapters.map(ch => {
+        const item = new ChapterTreeItem(ch, this.getChapterStatus(ch));
+        item.id = `s${gen}:${ch.trackId ?? ''}:${ch.id}`;
+        return item;
+      })
     );
   }
 

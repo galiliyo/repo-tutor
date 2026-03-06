@@ -264,6 +264,70 @@ describe('EvidenceBuilder.build()', () => {
     expect(pack.files[0].headTailTruncated).toBe(true);
   });
 
+  it('filters targetFiles by track — excludes frontend files from backend chapter', async () => {
+    mockedFs.readFile.mockResolvedValue('const x = 1;');
+
+    const builder = new EvidenceBuilder();
+    const chapter = mkChapter({
+      targetFiles: ['src/routes/api.ts', 'static/app.js', 'src/utils/helpers.ts'],
+      trackId: 'backend',
+    });
+    // fileTrackMap: static/app.js → frontend (via FE_DIRS), routes → backend
+    const analysis = mkAnalysis({
+      fileTrackMap: new Map([
+        ['src/routes/api.ts', 'backend'],
+        ['static/app.js', 'frontend'],
+      ]),
+    });
+
+    const pack = await builder.build(chapter, analysis);
+
+    const paths = pack.files.map(f => f.path);
+    expect(paths).toContain('src/routes/api.ts');
+    expect(paths).toContain('src/utils/helpers.ts'); // shared — included
+    expect(paths).not.toContain('static/app.js');    // frontend — excluded from backend
+  });
+
+  it('returns empty files when ALL targetFiles belong to wrong track', async () => {
+    mockedFs.readFile.mockResolvedValue('const x = 1;');
+
+    const builder = new EvidenceBuilder();
+    const chapter = mkChapter({
+      targetFiles: ['static/app.js', 'src/components/Button.tsx'],
+      trackId: 'backend',
+    });
+    const analysis = mkAnalysis({
+      fileTrackMap: new Map([
+        ['static/app.js', 'frontend'],
+        ['src/components/Button.tsx', 'frontend'],
+      ]),
+    });
+
+    const pack = await builder.build(chapter, analysis);
+
+    // Should NOT fall through to unfiltered files
+    expect(pack.files).toHaveLength(0);
+  });
+
+  it('does not filter targetFiles for architecture track', async () => {
+    mockedFs.readFile.mockResolvedValue('const x = 1;');
+
+    const builder = new EvidenceBuilder();
+    const chapter = mkChapter({
+      targetFiles: ['src/routes/api.ts', 'static/app.js'],
+      trackId: 'architecture',
+    });
+    const analysis = mkAnalysis({
+      fileTrackMap: new Map([
+        ['src/routes/api.ts', 'backend'],
+        ['static/app.js', 'frontend'],
+      ]),
+    });
+
+    const pack = await builder.build(chapter, analysis);
+    expect(pack.files.map(f => f.path)).toContain('static/app.js');
+  });
+
   it('build() accepts budget override', async () => {
     mockedFs.readFile.mockResolvedValue('const x = 1;');
 

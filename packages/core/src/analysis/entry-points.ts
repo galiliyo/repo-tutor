@@ -29,11 +29,21 @@ export async function detectEntryPoints(repoPath: string): Promise<FileReference
     // No package.json
   }
 
-  // Check common entry file names
+  // Check common entry file names (all languages)
   const commonEntries = [
     'index.ts', 'index.js', 'main.ts', 'main.js',
     'app.ts', 'app.js', 'server.ts', 'server.js',
     'src/index.ts', 'src/index.js', 'src/main.ts', 'src/main.js',
+    // Python
+    'main.py', 'app.py', 'manage.py', 'wsgi.py', 'asgi.py',
+    // Go
+    'main.go', 'cmd/main.go',
+    // Ruby
+    'config.ru', 'Rakefile',
+    // Java
+    'src/main/java/Main.java',
+    // Rust
+    'src/main.rs', 'src/lib.rs',
   ];
 
   for (const entry of commonEntries) {

@@ -549,6 +549,20 @@ export class LearningPanel {
     this._panel.webview.postMessage(message);
   }
 
+  public clearSession(): void {
+    this._generatedContent.clear();
+    this._generatedQuizzes.clear();
+    this._currentQuestions = [];
+    this._prefetchQueue = [];
+    this._prefetching = false;
+    if (this._prefetchAbortController) {
+      this._prefetchAbortController.abort();
+      this._prefetchAbortController = null;
+    }
+    this._inflight.clear();
+    this._panel.dispose();
+  }
+
   public dispose() {
     LearningPanel.currentPanel = undefined;
 
@@ -1530,13 +1544,8 @@ export class LearningPanel {
         feedbackP.innerHTML = evaluation.feedback;
         feedbackDiv.appendChild(feedbackP);
 
-        if (evaluation.explanation) {
-          const explainDiv = document.createElement('div');
-          explainDiv.style.fontStyle = 'italic';
-          // Explanation is pre-rendered to HTML by extension via marked
-          explainDiv.innerHTML = evaluation.explanation;
-          feedbackDiv.appendChild(explainDiv);
-        }
+        // Static explanation disabled — redundant with streamed explanation below.
+        // Showing both caused duplicate answers. See _submitAnswer() for context.
 
         questionDiv.appendChild(feedbackDiv);
 

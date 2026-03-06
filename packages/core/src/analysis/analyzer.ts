@@ -8,6 +8,25 @@ import { buildDependencyGraph, type FileImports } from './dependency-graph';
 import { detectEntryPoints } from './entry-points';
 import { detectTracks } from './track-detector';
 
+const TEST_DIR_PATTERNS = new Set([
+  'test', 'tests', '__tests__', 'spec', 'specs',
+  'e2e', 'cypress', '__mocks__', 'fixtures',
+]);
+
+const EXT_TO_LANGUAGE: Record<string, string> = {
+  '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript', '.mts': 'javascript',
+  '.ts': 'typescript', '.tsx': 'typescript',
+  '.py': 'python',
+  '.rb': 'ruby',
+  '.go': 'go',
+  '.java': 'java', '.kt': 'kotlin',
+  '.swift': 'swift',
+  '.cs': 'csharp',
+  '.cpp': 'cpp', '.c': 'c', '.h': 'c', '.hpp': 'cpp',
+  '.rs': 'rust',
+  '.php': 'php',
+};
+
 export class Analyzer {
   private registry: LanguageRegistry;
 
@@ -19,9 +38,14 @@ export class Analyzer {
   async analyze(repoPath: string, config: SecurityConfig): Promise<AnalysisResult> {
     const absolutePath = path.resolve(repoPath);
 
-    // Find all source files
-    const extensions = this.registry.getSupportedExtensions();
-    const pattern = `**/*{${extensions.join(',')}}`;
+    // Find all source files (broad glob for all languages)
+    const allSourceExts = [
+      ...this.registry.getSupportedExtensions(),
+      '.py', '.rb', '.go', '.java', '.kt', '.swift', '.cs',
+      '.cpp', '.c', '.h', '.hpp', '.rs', '.php',
+    ];
+    const uniqueExts = [...new Set(allSourceExts)];
+    const pattern = `**/*{${uniqueExts.join(',')}}`;
 
     const skipPatterns = [
       'node_modules/**',
@@ -34,17 +58,17 @@ export class Analyzer {
       nodir: true,
     });
 
-    // Parse all files and collect imports
+    // Parse files that have language plugins; detect languages from extensions
     const fileImports: FileImports[] = [];
     const languages = new Set<string>();
 
     for (const file of files) {
       const ext = path.extname(file);
+      const lang = EXT_TO_LANGUAGE[ext];
+      if (lang) languages.add(lang);
+
       const plugin = this.registry.getByExtension(ext);
-
       if (!plugin) continue;
-
-      languages.add(plugin.id);
 
       try {
         const fullPath = path.join(absolutePath, file);
@@ -84,22 +108,27 @@ export class Analyzer {
   }
 
   private detectModules(files: string[]) {
-    const moduleDirs = new Map<string, number>();
+    const moduleDirs = new Map<string, string[]>();
 
     for (const file of files) {
-      const parts = file.split(path.sep);
+      const normalized = file.replace(/\\/g, '/');
+      const parts = normalized.split('/');
       if (parts.length > 1) {
         const dir = parts[0];
-        moduleDirs.set(dir, (moduleDirs.get(dir) || 0) + 1);
+        const existing = moduleDirs.get(dir) || [];
+        existing.push(normalized);
+        moduleDirs.set(dir, existing);
       }
     }
 
     return Array.from(moduleDirs.entries())
-      .filter(([, count]) => count >= 2)
-      .map(([name, fileCount]) => ({
+      .filter(([, moduleFiles]) => moduleFiles.length >= 2)
+      .map(([name, moduleFiles]) => ({
         name,
         path: name,
-        fileCount,
+        fileCount: moduleFiles.length,
+        files: moduleFiles,
+        role: TEST_DIR_PATTERNS.has(name.toLowerCase()) ? 'test' as const : 'source' as const,
       }));
   }
 }

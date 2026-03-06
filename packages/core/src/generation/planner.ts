@@ -1,6 +1,6 @@
 // packages/core/src/generation/planner.ts
 
-import type { AnalysisResult, Chapter, UserContext } from '../types';
+import type { AnalysisResult, Chapter, UserContext, Logger } from '../types';
 import type { Track } from '../types/track';
 import type { ILLMClient } from './llm-client';
 import type { IPromptLoader } from './prompt-loader';
@@ -15,7 +15,8 @@ const TRACK_PATTERN_KEYWORDS: Record<string, string[]> = {
 export class Planner {
   constructor(
     private llmClient: ILLMClient,
-    private promptLoader: IPromptLoader
+    private promptLoader: IPromptLoader,
+    private log?: Logger,
   ) {}
 
   async plan(
@@ -25,14 +26,35 @@ export class Planner {
   ): Promise<Chapter[]> {
     // Filter analysis data by track to avoid sending irrelevant modules to the LLM
     let { modules, entryPoints, http, stateManagement, patterns } = analysis;
+    let { dependencyGraph } = analysis;
     if (track && track.id !== 'architecture') {
       const trackId = track.id;
       const matchesTrack = (p: string) => {
         const cls = classifyFileTrack(p, analysis.fileTrackMap);
         return cls === trackId || cls === 'shared';
       };
-      modules = modules.filter(m => matchesTrack(m.path));
+      modules = modules
+        .map(m => {
+          // Filter module's file list to only track-relevant files
+          const filteredFiles = (m.files || []).filter(f => {
+            const cls = classifyFileTrack(f, analysis.fileTrackMap);
+            return cls === trackId || cls === 'shared';
+          });
+          if (filteredFiles.length === 0) return null;
+          return { ...m, files: filteredFiles, fileCount: filteredFiles.length };
+        })
+        .filter((m): m is NonNullable<typeof m> => m !== null);
       entryPoints = entryPoints.filter(ep => matchesTrack(ep.path));
+
+      // Filter dependency graph nodes/edges/layers by track
+      const allowedNodes = new Set(
+        dependencyGraph.nodes.filter(n => matchesTrack(n.path)).map(n => n.path),
+      );
+      dependencyGraph = {
+        nodes: dependencyGraph.nodes.filter(n => allowedNodes.has(n.path)),
+        edges: dependencyGraph.edges.filter(e => allowedNodes.has(e.from) && allowedNodes.has(e.to)),
+        layers: dependencyGraph.layers?.map(layer => layer.filter(f => allowedNodes.has(f))).filter(layer => layer.length > 0),
+      };
 
       if (trackId === 'backend') {
         stateManagement = undefined;
@@ -59,7 +81,7 @@ export class Planner {
       http: http || { framework: 'none' },
       stateManagement: stateManagement || { type: 'none' },
       modules,
-      dependencyLayers: this.formatLayers(analysis.dependencyGraph.layers),
+      dependencyLayers: this.formatLayers(dependencyGraph.layers),
       trackId: track?.id,
       trackLabel: track?.label,
       trackDescription: track?.description,
@@ -67,15 +89,41 @@ export class Planner {
     });
 
     // Call LLM
-    const response = await this.llmClient.complete(prompt);
+    this.log?.info(`[planner] track=${track?.id ?? 'all'} modules=${modules.length} entryPoints=${entryPoints.length}`);
+    this.log?.info(`[planner]   modules: ${JSON.stringify(modules.map(m => m.name))}`);
+    this.log?.info(`[planner]   entryPoints: ${JSON.stringify(entryPoints.map(e => e.path))}`);
+    this.log?.info(`[planner]   depGraph nodes: ${dependencyGraph.nodes.length} edges: ${dependencyGraph.edges.length}`);
+    this.log?.info(`[planner]   layers: ${this.formatLayers(dependencyGraph.layers) || '(none)'}`);
+    this.log?.info(`[planner]   fileTrackMap size: ${analysis.fileTrackMap?.size ?? 0}`);
+    const response = await this.llmClient.complete(prompt, undefined, 'planner');
 
     let jsonStr = response.content.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
     }
     const parsed = JSON.parse(jsonStr);
+    const chapters = parsed.chapters as Chapter[];
 
-    return parsed.chapters as Chapter[];
+    this.log?.info(`[planner] LLM returned ${chapters.length} chapters for track=${track?.id ?? 'all'}`);
+    for (const ch of chapters) {
+      this.log?.info(`[planner]   "${ch.title}" targetFiles=${JSON.stringify(ch.targetFiles)}`);
+    }
+
+    // Post-filter: strip targetFiles that belong to a different track
+    if (track && track.id !== 'architecture' && analysis.fileTrackMap) {
+      for (const ch of chapters) {
+        const before = ch.targetFiles.length;
+        ch.targetFiles = ch.targetFiles.filter(f => {
+          const cls = classifyFileTrack(f, analysis.fileTrackMap);
+          return cls === track.id || cls === 'shared';
+        });
+        if (ch.targetFiles.length < before) {
+          this.log?.info(`[planner]   post-filter "${ch.title}": ${before} → ${ch.targetFiles.length} files`);
+        }
+      }
+    }
+
+    return chapters;
   }
 
   private formatLayers(layers?: string[][]): string {

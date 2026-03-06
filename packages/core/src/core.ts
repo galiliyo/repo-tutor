@@ -51,7 +51,7 @@ export class RepoTutorCore {
   private questionAnswerer: QuestionAnswerer | null = null;
   private redactor: Redactor;
 
-  constructor(promptsDir?: string, logger?: Logger) {
+  constructor(promptsDir?: string, private logger?: Logger) {
     // Default to spec/prompts relative to monorepo root
     const specsDir = promptsDir || path.resolve(__dirname, '../../../spec/prompts');
 
@@ -71,11 +71,11 @@ export class RepoTutorCore {
     this.llmClient.setConfig(config);
 
     // Initialize components that depend on the LLM client
-    this.planner = new Planner(this.llmClient, this.promptLoader);
-    this.chapterWriter = new ChapterWriter(this.llmClient, this.promptLoader);
-    this.quizGenerator = new QuizGenerator(this.llmClient, this.promptLoader);
-    this.quizEvaluator = new QuizEvaluator(this.llmClient, this.promptLoader);
-    this.questionAnswerer = new QuestionAnswerer(this.llmClient, this.promptLoader);
+    this.planner = new Planner(this.llmClient, this.promptLoader, this.logger);
+    this.chapterWriter = new ChapterWriter(this.llmClient, this.promptLoader, this.logger);
+    this.quizGenerator = new QuizGenerator(this.llmClient, this.promptLoader, this.logger);
+    this.quizEvaluator = new QuizEvaluator(this.llmClient, this.promptLoader, this.logger);
+    this.questionAnswerer = new QuestionAnswerer(this.llmClient, this.promptLoader, this.logger);
   }
 
   /**
