@@ -85,7 +85,14 @@ export class ChapterWriter {
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
     }
 
-    const parsed = JSON.parse(jsonStr);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (err: any) {
+      throw new Error(
+        `Failed to parse LLM JSON (chapter-outline): ${err.message}\nResponse: ${jsonStr.slice(0, 300)}...`
+      );
+    }
 
     return {
       chapterId: evidence.chapterId,

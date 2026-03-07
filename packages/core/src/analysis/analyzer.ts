@@ -59,8 +59,8 @@ export class Analyzer {
     });
 
     // Parse files that have language plugins; detect languages from extensions
-    const fileImports: FileImports[] = [];
     const languages = new Set<string>();
+    const parseable: { file: string; plugin: NonNullable<ReturnType<LanguageRegistry['getByExtension']>>; fullPath: string }[] = [];
 
     for (const file of files) {
       const ext = path.extname(file);
@@ -68,16 +68,28 @@ export class Analyzer {
       if (lang) languages.add(lang);
 
       const plugin = this.registry.getByExtension(ext);
-      if (!plugin) continue;
+      if (plugin) {
+        parseable.push({ file, plugin, fullPath: path.join(absolutePath, file) });
+      }
+    }
 
-      try {
-        const fullPath = path.join(absolutePath, file);
-        const ast = await plugin.parseFile(fullPath);
-        const imports = plugin.getImports(ast);
+    const parseResults = await Promise.allSettled(
+      parseable.map(async ({ file, plugin, fullPath }) => {
+        const ast = await plugin!.parseFile(fullPath);
+        const imports = plugin!.getImports(ast);
+        const content = ast._sourceText ?? '';
+        return { filePath: fullPath, imports, file, content };
+      }),
+    );
 
-        fileImports.push({ filePath: fullPath, imports });
-      } catch (error) {
-        console.warn(`Failed to parse ${file}:`, error);
+    const fileImports: FileImports[] = [];
+    const parsedContents = new Map<string, string>();
+    for (const result of parseResults) {
+      if (result.status === 'fulfilled') {
+        fileImports.push({ filePath: result.value.filePath, imports: result.value.imports });
+        parsedContents.set(result.value.file, result.value.content);
+      } else {
+        console.warn(`Failed to parse file:`, result.reason);
       }
     }
 
@@ -100,7 +112,8 @@ export class Analyzer {
       analyzedAt: new Date().toISOString(),
     };
 
-    const { tracks: detectedTracks, fileTrackMap } = await detectTracks(absolutePath, files, result);
+    // Pass parsed file contents to detectTracks to avoid re-reading files
+    const { tracks: detectedTracks, fileTrackMap } = await detectTracks(absolutePath, files, result, parsedContents);
     result.detectedTracks = detectedTracks;
     result.fileTrackMap = fileTrackMap;
 

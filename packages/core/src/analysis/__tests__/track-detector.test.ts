@@ -158,11 +158,11 @@ describe('detectTracks', () => {
     ]);
     const { fileTrackMap } = await detectTracks('/fake', files, stubAnalysis(), contents);
     // app/main.py classified by content, app/utils.py + app/models.py inferred
-    expect(fileTrackMap.get('app/main.py')).toBe('backend');
-    expect(fileTrackMap.get('app/utils.py')).toBe('backend');
-    expect(fileTrackMap.get('app/models.py')).toBe('backend');
+    expect(fileTrackMap['app/main.py']).toBe('backend');
+    expect(fileTrackMap['app/utils.py']).toBe('backend');
+    expect(fileTrackMap['app/models.py']).toBe('backend');
     // static/app.js correctly frontend
-    expect(fileTrackMap.get('static/app.js')).toBe('frontend');
+    expect(fileTrackMap['static/app.js']).toBe('frontend');
   });
 
   it('architecture confidence scales with module count', async () => {
@@ -229,12 +229,12 @@ describe('classifyFileTrack', () => {
   });
 
   it('uses fileTrackMap when provided', () => {
-    const map = new Map<string, TrackId>([['lib/unknown.ts', 'frontend']]);
+    const map: Record<string, TrackId> = { 'lib/unknown.ts': 'frontend' };
     expect(classifyFileTrack('lib/unknown.ts', map)).toBe('frontend');
   });
 
   it('falls back to directory matching when map has no entry', () => {
-    const map = new Map<string, TrackId>();
+    const map: Record<string, TrackId> = {};
     expect(classifyFileTrack('src/components/Foo.tsx', map)).toBe('frontend');
   });
 
@@ -247,7 +247,7 @@ describe('classifyFileTrack', () => {
   });
 
   it('returns shared for unknown files not in map', () => {
-    const map = new Map<string, TrackId>();
+    const map: Record<string, TrackId> = {};
     expect(classifyFileTrack('lib/utils.ts', map)).toBe('shared');
   });
 });
@@ -255,46 +255,46 @@ describe('classifyFileTrack', () => {
 describe('inferDirectoryTracks', () => {
   it('infers backend for app/ when sampled files are backend', () => {
     const files = ['app/main.py', 'app/utils.py', 'app/helpers.py'];
-    const map = new Map<string, TrackId>([['app/main.py', 'backend']]);
+    const map: Record<string, TrackId> = { 'app/main.py': 'backend' };
     inferDirectoryTracks(files, map);
-    expect(map.get('app/utils.py')).toBe('backend');
-    expect(map.get('app/helpers.py')).toBe('backend');
+    expect(map['app/utils.py']).toBe('backend');
+    expect(map['app/helpers.py']).toBe('backend');
   });
 
   it('infers frontend for static/ when sampled files are frontend', () => {
     const files = ['static/app.js', 'static/styles.css', 'static/logo.png'];
-    const map = new Map<string, TrackId>([['static/app.js', 'frontend']]);
+    const map: Record<string, TrackId> = { 'static/app.js': 'frontend' };
     inferDirectoryTracks(files, map);
-    expect(map.get('static/styles.css')).toBe('frontend');
-    expect(map.get('static/logo.png')).toBe('frontend');
+    expect(map['static/styles.css']).toBe('frontend');
+    expect(map['static/logo.png']).toBe('frontend');
   });
 
   it('does not override already-classified files', () => {
     const files = ['app/main.py', 'app/client.tsx'];
-    const map = new Map<string, TrackId>([
-      ['app/main.py', 'backend'],
-      ['app/client.tsx', 'frontend'],
-    ]);
+    const map: Record<string, TrackId> = {
+      'app/main.py': 'backend',
+      'app/client.tsx': 'frontend',
+    };
     inferDirectoryTracks(files, map);
-    expect(map.get('app/client.tsx')).toBe('frontend');
+    expect(map['app/client.tsx']).toBe('frontend');
   });
 
   it('does not infer when dir is mixed below threshold', () => {
     const files = ['mixed/a.py', 'mixed/b.tsx', 'mixed/c.ts'];
     // 1 backend, 1 frontend — 50% each, below 60% threshold
-    const map = new Map<string, TrackId>([
-      ['mixed/a.py', 'backend'],
-      ['mixed/b.tsx', 'frontend'],
-    ]);
+    const map: Record<string, TrackId> = {
+      'mixed/a.py': 'backend',
+      'mixed/b.tsx': 'frontend',
+    };
     inferDirectoryTracks(files, map);
-    expect(map.has('mixed/c.ts')).toBe(false);
+    expect('mixed/c.ts' in map).toBe(false);
   });
 
   it('skips root-level files', () => {
     const files = ['README.md', 'app/main.py'];
-    const map = new Map<string, TrackId>([['app/main.py', 'backend']]);
+    const map: Record<string, TrackId> = { 'app/main.py': 'backend' };
     inferDirectoryTracks(files, map);
-    expect(map.has('README.md')).toBe(false);
+    expect('README.md' in map).toBe(false);
   });
 });
 

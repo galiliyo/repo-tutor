@@ -274,7 +274,7 @@ describe('EvidenceBuilder.build()', () => {
     });
     // fileTrackMap: static/app.js → frontend (via FE_DIRS), routes → backend
     const analysis = mkAnalysis({
-      fileTrackMap: new Map([
+      fileTrackMap: Object.fromEntries([
         ['src/routes/api.ts', 'backend'],
         ['static/app.js', 'frontend'],
       ]),
@@ -297,7 +297,7 @@ describe('EvidenceBuilder.build()', () => {
       trackId: 'backend',
     });
     const analysis = mkAnalysis({
-      fileTrackMap: new Map([
+      fileTrackMap: Object.fromEntries([
         ['static/app.js', 'frontend'],
         ['src/components/Button.tsx', 'frontend'],
       ]),
@@ -318,7 +318,7 @@ describe('EvidenceBuilder.build()', () => {
       trackId: 'architecture',
     });
     const analysis = mkAnalysis({
-      fileTrackMap: new Map([
+      fileTrackMap: Object.fromEntries([
         ['src/routes/api.ts', 'backend'],
         ['static/app.js', 'frontend'],
       ]),

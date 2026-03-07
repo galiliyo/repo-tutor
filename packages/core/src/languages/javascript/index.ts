@@ -9,6 +9,24 @@ const EXPORT_NAMED_RE = /export\s+(?:function|class|const|let|var|interface|type
 const EXPORT_DEFAULT_RE = /export\s+default\s+/g;
 const REEXPORT_RE = /export\s+\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/g;
 
+function buildLineOffsets(text: string): number[] {
+  const offsets = [0];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\n') offsets.push(i + 1);
+  }
+  return offsets;
+}
+
+function getLineNumber(offsets: number[], index: number): number {
+  let lo = 0, hi = offsets.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (offsets[mid] <= index) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo; // 1-based line number
+}
+
 export class JavaScriptPlugin implements LanguagePlugin {
   id = 'javascript';
   extensions = ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.mts'];
@@ -26,6 +44,7 @@ export class JavaScriptPlugin implements LanguagePlugin {
 
   getImports(ast: ASTNode): Import[] {
     const text = ast._sourceText ?? '';
+    const offsets = buildLineOffsets(text);
     const imports: Import[] = [];
     let match: RegExpExecArray | null;
 
@@ -46,7 +65,7 @@ export class JavaScriptPlugin implements LanguagePlugin {
         }
       }
 
-      const line = text.substring(0, match.index).split('\n').length;
+      const line = getLineNumber(offsets, match.index);
       imports.push({
         source,
         specifiers,
@@ -61,7 +80,7 @@ export class JavaScriptPlugin implements LanguagePlugin {
       const source = match[1];
       // Skip if already captured by the main regex
       if (imports.some(i => i.source === source)) continue;
-      const line = text.substring(0, match.index).split('\n').length;
+      const line = getLineNumber(offsets, match.index);
       imports.push({ source, specifiers: [], isRelative: source.startsWith('.'), line });
     }
 
@@ -70,13 +89,14 @@ export class JavaScriptPlugin implements LanguagePlugin {
 
   getExports(ast: ASTNode): Export[] {
     const text = ast._sourceText ?? '';
+    const offsets = buildLineOffsets(text);
     const exports: Export[] = [];
     let match: RegExpExecArray | null;
 
     // Re-exports
     const reexportRe = new RegExp(REEXPORT_RE.source, 'g');
     while ((match = reexportRe.exec(text)) !== null) {
-      const line = text.substring(0, match.index).split('\n').length;
+      const line = getLineNumber(offsets, match.index);
       for (const s of match[1].split(',')) {
         const name = s.trim().split(/\s+as\s+/).pop()!.trim();
         if (name) exports.push({ name, kind: 'reexport', line });
@@ -86,7 +106,7 @@ export class JavaScriptPlugin implements LanguagePlugin {
     // Named exports
     const namedRe = new RegExp(EXPORT_NAMED_RE.source, 'g');
     while ((match = namedRe.exec(text)) !== null) {
-      const line = text.substring(0, match.index).split('\n').length;
+      const line = getLineNumber(offsets, match.index);
       const full = match[0];
       let kind: Export['kind'] = 'variable';
       if (full.includes('function')) kind = 'function';
@@ -98,7 +118,7 @@ export class JavaScriptPlugin implements LanguagePlugin {
     // Default export
     const defaultRe = new RegExp(EXPORT_DEFAULT_RE.source, 'g');
     while ((match = defaultRe.exec(text)) !== null) {
-      const line = text.substring(0, match.index).split('\n').length;
+      const line = getLineNumber(offsets, match.index);
       exports.push({ name: 'default', kind: 'default', line });
     }
 
@@ -107,6 +127,7 @@ export class JavaScriptPlugin implements LanguagePlugin {
 
   getSymbols(ast: ASTNode): CodeSymbol[] {
     const text = ast._sourceText ?? '';
+    const offsets = buildLineOffsets(text);
     const symbols: CodeSymbol[] = [];
 
     const SYMBOL_RE = /(?:export\s+)?(?:default\s+)?(?:async\s+)?(function|class|interface|type|const|let|var)\s+(\w+)/g;
@@ -114,7 +135,7 @@ export class JavaScriptPlugin implements LanguagePlugin {
 
     while ((match = SYMBOL_RE.exec(text)) !== null) {
       const [, keyword, name] = match;
-      const line = text.substring(0, match.index).split('\n').length;
+      const line = getLineNumber(offsets, match.index);
       const col = match.index - text.lastIndexOf('\n', match.index - 1) - 1;
 
       let kind: CodeSymbol['kind'];

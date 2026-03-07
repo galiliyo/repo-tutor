@@ -81,6 +81,12 @@ export class QuizEvaluator {
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
     }
-    return JSON.parse(jsonStr) as LLMEvaluationResponse;
+    try {
+      return JSON.parse(jsonStr) as LLMEvaluationResponse;
+    } catch (err: any) {
+      throw new Error(
+        `Failed to parse LLM JSON (evaluator): ${err.message}\nResponse: ${jsonStr.slice(0, 300)}...`
+      );
+    }
   }
 }

@@ -3,18 +3,18 @@
 import * as vscode from 'vscode';
 import { getSettings, setApiKey, getApiKey, LLMProvider } from '../settings';
 import { configureLLM } from '../core-adapter';
-import { getProvider } from '../providers/registry';
+import { getProvider, PROVIDER_REGISTRY } from '../providers/registry';
 
 export async function configureApiKeyCommand(context: vscode.ExtensionContext): Promise<boolean> {
   const settings = getSettings();
 
   // Let user pick provider
   const providerChoice = await vscode.window.showQuickPick(
-    [
-      { label: 'Ollama (Local)', value: 'ollama' as LLMProvider, description: 'Free, runs locally' },
-      { label: 'Anthropic (Claude)', value: 'anthropic' as LLMProvider, description: 'Recommended cloud option' },
-      { label: 'OpenAI (GPT)', value: 'openai' as LLMProvider },
-    ],
+    PROVIDER_REGISTRY.map(p => ({
+      label: p.label,
+      value: p.id as LLMProvider,
+      description: !p.requiresApiKey ? 'Free, runs locally' : undefined,
+    })),
     { placeHolder: 'Select your LLM provider' }
   );
 

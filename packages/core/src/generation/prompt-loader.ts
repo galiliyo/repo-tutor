@@ -14,6 +14,7 @@ export interface IPromptLoader {
 export class PromptLoader implements IPromptLoader {
   private cache: Map<string, HandlebarsTemplateDelegate> = new Map();
   private promptsDir: string;
+  private handlebars = Handlebars.create();
 
   constructor(promptsDir: string) {
     this.promptsDir = promptsDir;
@@ -21,7 +22,7 @@ export class PromptLoader implements IPromptLoader {
   }
 
   private registerHelpers(): void {
-    Handlebars.registerHelper('json', (context) => {
+    this.handlebars.registerHelper('json', (context) => {
       return JSON.stringify(context, null, 2);
     });
   }
@@ -32,7 +33,7 @@ export class PromptLoader implements IPromptLoader {
     if (!template) {
       const filePath = path.join(this.promptsDir, `${name}.md`);
       const content = fs.readFileSync(filePath, 'utf-8');
-      template = Handlebars.compile(content);
+      template = this.handlebars.compile(content);
       this.cache.set(name, template);
     }
 

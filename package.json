@@ -12,8 +12,5 @@
     "@vscode/vsce": "^3.7.1",
     "prettier": "^3.2.0",
     "typescript": "^5.3.0"
-  },
-  "dependencies": {
-    "marked": "^17.0.3"
   }
 }

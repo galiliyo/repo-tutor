@@ -9,7 +9,7 @@ export class StatusBarManager {
   constructor(secrets: vscode.SecretStorage) {
     this.secrets = secrets;
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-    this.item.command = 'repo-tutor.modelConfig.focus';
+    this.item.command = 'repo-tutor.chapters.focus';
     this.refresh();
     this.item.show();
   }

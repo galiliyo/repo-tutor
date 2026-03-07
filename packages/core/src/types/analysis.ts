@@ -87,5 +87,5 @@ export interface AnalysisResult {
   stateManagement?: StateManagementAnalysis;
   analyzedAt: string;
   detectedTracks?: Track[];
-  fileTrackMap?: Map<string, TrackId>;
+  fileTrackMap?: Record<string, TrackId>;
 }

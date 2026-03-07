@@ -4,6 +4,7 @@ import type { ILLMClient } from './llm-client';
 import type { IPromptLoader } from './prompt-loader';
 import type { Answer } from '../types/quiz';
 import type { QuestionContext, Logger } from '../types/config';
+import { detectLanguage } from './evidence-builder';
 
 /**
  * LLM response shape before mapping to our Answer type.
@@ -58,7 +59,7 @@ export class QuestionAnswerer {
       .flatMap((s) =>
         (s.codeReferences ?? []).map((ref) => ({
           file: ref.file,
-          language: this.guessLanguage(ref.file),
+          language: detectLanguage(ref.file),
           content: `Lines ${ref.startLine ?? '?'}–${ref.endLine ?? '?'}`,
         }))
       );
@@ -84,27 +85,17 @@ export class QuestionAnswerer {
     };
   }
 
-  private guessLanguage(filePath: string): string {
-    const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-    const map: Record<string, string> = {
-      ts: 'typescript',
-      tsx: 'typescript',
-      js: 'javascript',
-      jsx: 'javascript',
-      py: 'python',
-      rs: 'rust',
-      go: 'go',
-      java: 'java',
-      rb: 'ruby',
-    };
-    return map[ext] ?? ext;
-  }
-
   private parseJSON(content: string): LLMAnswerResponse {
     let jsonStr = content.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
     }
-    return JSON.parse(jsonStr) as LLMAnswerResponse;
+    try {
+      return JSON.parse(jsonStr) as LLMAnswerResponse;
+    } catch (err: any) {
+      throw new Error(
+        `Failed to parse LLM JSON (question-answerer): ${err.message}\nResponse: ${jsonStr.slice(0, 300)}...`
+      );
+    }
   }
 }

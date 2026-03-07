@@ -223,12 +223,23 @@ export class ModelConfigView implements vscode.WebviewViewProvider {
     this._view?.webview.postMessage(msg);
   }
 
+  private _getNonce(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 32; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
   private _getHtml(): string {
+    const nonce = this._getNonce();
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${this._view?.webview.cspSource ?? 'none'};">
   <style>
     body {
       font-family: var(--vscode-font-family);
@@ -347,7 +358,7 @@ export class ModelConfigView implements vscode.WebviewViewProvider {
     <div id="testResult"></div>
   </div>
 
-  <script>
+  <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
 
     const providerEl = document.getElementById('provider');

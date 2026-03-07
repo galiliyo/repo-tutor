@@ -1,6 +1,7 @@
 // packages/vscode-extension/src/views/LearningPanel.ts
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { marked } from 'marked';
 import { Chapter, ChapterContent, ChapterOutline, Question, Evaluation, Answer, Track } from '@repo-tutor/core';
 
@@ -10,28 +11,43 @@ const md = (text: string): string => marked.parse(text) as string;
  * Post-process HTML to turn known file paths into clickable code-ref spans.
  * Matches paths inside <code> tags and as bare text (e.g. `src/foo.ts` or src/foo.ts).
  */
+let _linkifyCache: { files: Set<string>; pattern: RegExp } | null = null;
+
 function linkifyFilePaths(html: string, knownFiles: Set<string>): string {
   if (knownFiles.size === 0) return html;
 
-  // Sort longest-first so `src/utils/helper.ts` matches before `src/utils`
-  const sorted = [...knownFiles].sort((a, b) => b.length - a.length);
-  // Escape for regex
-  const escaped = sorted.map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const pattern = new RegExp(
-    // Match inside <code>path</code> or bare path references, but not already inside a tag attribute
-    `(<code>)(${escaped.join('|')})(</code>)` +
-    `|(?<![/"'>=-])(${escaped.join('|')})(?=[^/\\w]|$)`,
-    'g'
-  );
+  if (!_linkifyCache || _linkifyCache.files !== knownFiles) {
+    const sorted = [...knownFiles].sort((a, b) => b.length - a.length);
+    const escaped = sorted.map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    _linkifyCache = {
+      files: knownFiles,
+      pattern: new RegExp(
+        `(<code>)(${escaped.join('|')})(</code>)` +
+        `|(?<![/"'>=-])(${escaped.join('|')})(?=[^/\\w]|$)`,
+        'g'
+      ),
+    };
+  }
 
-  return html.replace(pattern, (...args) => {
-    // Groups: 1=<code>, 2=path-in-code, 3=</code>, 4=bare-path
-    const codeOpen = args[1];
+  // Reset lastIndex for global regex
+  _linkifyCache.pattern.lastIndex = 0;
+  return html.replace(_linkifyCache.pattern, (...args) => {
     const codePath = args[2];
     const barePath = args[4];
     const filePath = codePath || barePath;
     return `<span class="code-ref" data-file="${filePath}">${filePath}</span>`;
   });
+}
+
+function sanitizeHtml(html: string): string {
+  // Strip script tags, event handlers, and dangerous elements
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\bon\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+    .replace(/<iframe\b[^>]*>.*?<\/iframe>/gi, '')
+    .replace(/<object\b[^>]*>.*?<\/object>/gi, '')
+    .replace(/<embed\b[^>]*>/gi, '')
+    .replace(/<link\b[^>]*>/gi, '');
 }
 import { getCoreAdapter, getDefaultUserContext } from '../core-adapter';
 import { SessionState } from './ChaptersTreeProvider';
@@ -94,6 +110,7 @@ export class LearningPanel {
   private _prefetching = false;
   private _prefetchAbortController: AbortController | null = null;
   private _inflight: Set<string> = new Set();
+  private _inflightCallbacks: Map<string, Array<() => void>> = new Map();
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -142,7 +159,7 @@ export class LearningPanel {
   }
 
   public loadChapter(chapterId: string): void {
-    this._postMessage({ type: 'chapter:request', chapterId } as unknown as ExtensionToWebviewMessage);
+    this._loadChapter(chapterId);
   }
 
   public postAnalyzing(repoPath: string): void {
@@ -292,9 +309,11 @@ export class LearningPanel {
 
       // If already inflight from prefetch, wait for it
       if (this._inflight.has(chapterId)) {
-        while (this._inflight.has(chapterId)) {
-          await new Promise(r => setTimeout(r, 200));
-        }
+        await new Promise<void>(resolve => {
+          const callbacks = this._inflightCallbacks.get(chapterId) || [];
+          callbacks.push(resolve);
+          this._inflightCallbacks.set(chapterId, callbacks);
+        });
         content = this._generatedContent.get(chapterId);
       }
 
@@ -331,7 +350,7 @@ export class LearningPanel {
       ...content,
       sections: content.sections.map((s) => ({
         ...s,
-        content: linkifyFilePaths(md(s.content), knownFiles),
+        content: sanitizeHtml(linkifyFilePaths(md(s.content), knownFiles)),
       })),
     };
     this._postMessage({ type: 'chapter:loaded', chapter: rendered });
@@ -352,6 +371,9 @@ export class LearningPanel {
       this._generatedContent.set(chapterId, content);
     } finally {
       this._inflight.delete(chapterId);
+      const callbacks = this._inflightCallbacks.get(chapterId) || [];
+      this._inflightCallbacks.delete(chapterId);
+      callbacks.forEach(cb => cb());
     }
   }
 
@@ -366,13 +388,15 @@ export class LearningPanel {
     if (this._prefetching) return;
     this._prefetching = true;
     const signal = this._prefetchAbortController?.signal;
+    const CONCURRENCY = 2;
 
     try {
       while (this._prefetchQueue.length > 0) {
         if (signal?.aborted) break;
-        const nextId = this._prefetchQueue.shift()!;
-        if (this._generatedContent.has(nextId)) continue;
-        await this._prefetchChapter(nextId);
+        const batch = this._prefetchQueue.splice(0, CONCURRENCY)
+          .filter(id => !this._generatedContent.has(id));
+        if (batch.length === 0) continue;
+        await Promise.all(batch.map(id => this._prefetchChapter(id)));
         this._sendChapterStates();
         // Notify webview of progress
         const total = this._session.chapters.filter(
@@ -453,18 +477,19 @@ export class LearningPanel {
 
       const rendered = {
         ...evaluation,
-        feedback: md(evaluation.feedback),
-        explanation: evaluation.explanation ? md(evaluation.explanation) : undefined,
+        feedback: sanitizeHtml(md(evaluation.feedback)),
+        explanation: evaluation.explanation ? sanitizeHtml(md(evaluation.explanation)) : undefined,
       };
       this._postMessage({ type: 'answer:evaluated', evaluation: rendered });
 
       // Stream detailed explanation (non-fatal)
-      // Accumulate server-side, send pre-rendered HTML each time
+      // Send raw text chunks to webview; render once at the end
       try {
         let accumulated = '';
         for await (const chunk of core.streamEvaluationExplanation(question, answer, evaluation)) {
           accumulated += chunk;
-          this._postMessage({ type: 'answer:explanation-chunk', questionId, text: md(accumulated) });
+          // Send raw text, let webview append
+          this._postMessage({ type: 'answer:explanation-chunk', questionId, text: chunk });
         }
       } catch {
         // Streaming is best-effort — static feedback already shown
@@ -502,7 +527,13 @@ export class LearningPanel {
 
   private async _openFile(file: string, line?: number) {
     const repoPath = this._session.repoPath;
-    const uri = vscode.Uri.file(`${repoPath}/${file}`);
+    // Validate: resolve and check it's within repoPath
+    const resolved = path.resolve(repoPath, file);
+    if (!resolved.startsWith(path.resolve(repoPath))) {
+      vscode.window.showErrorMessage('Invalid file path');
+      return;
+    }
+    const uri = vscode.Uri.file(resolved);
 
     try {
       const doc = await vscode.workspace.openTextDocument(uri);
@@ -560,7 +591,6 @@ export class LearningPanel {
       this._prefetchAbortController = null;
     }
     this._inflight.clear();
-    this._panel.dispose();
   }
 
   public dispose() {
@@ -576,15 +606,23 @@ export class LearningPanel {
     }
   }
 
+  private _getNonce(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 32; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
   private _getHtmlForWebview(): string {
-    // Note: innerHTML usage here is for rendering content from our own LLM-generated
-    // educational content, not arbitrary user input. For production, consider sanitizing
-    // LLM output with DOMPurify.
+    const nonce = this._getNonce();
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${this._panel.webview.cspSource};">
   <title>Repo Tutor</title>
   <style>
     :root {
@@ -1007,7 +1045,7 @@ export class LearningPanel {
     </div>
   </div>
 
-  <script>
+  <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
 
     let state = {
@@ -1780,13 +1818,12 @@ export class LearningPanel {
         }
 
         case 'answer:explanation-chunk': {
-          // Server sends full pre-rendered HTML (accumulated + converted via marked), just replace.
-          // Content originates from our own LLM explanation pipeline, not arbitrary user input.
+          // Server sends raw text chunks; accumulate and show raw text while streaming
           state.streamedExplanations = state.streamedExplanations || {};
-          state.streamedExplanations[message.questionId] = message.text;
+          state.streamedExplanations[message.questionId] = (state.streamedExplanations[message.questionId] || '') + message.text;
           const streamEl = document.getElementById('streamingExplanation');
           if (streamEl) {
-            streamEl.innerHTML = message.text;
+            streamEl.textContent = state.streamedExplanations[message.questionId];
             streamEl.classList.add('streaming');
             streamEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
@@ -1797,10 +1834,10 @@ export class LearningPanel {
           const doneEl = document.getElementById('streamingExplanation');
           if (doneEl) {
             doneEl.classList.remove('streaming');
+            // Render final accumulated markdown to HTML once at the end
             const finalText = (state.streamedExplanations || {})[message.questionId] || '';
             if (finalText) {
-              // Note: Content comes from our own LLM, same trust model as formatContent usage elsewhere in this file
-              doneEl.innerHTML = (finalText);
+              doneEl.innerHTML = finalText;
             }
           }
           break;

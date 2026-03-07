@@ -416,7 +416,7 @@ describe('Planner', () => {
       { name: 'static', path: 'static', description: 'Frontend assets', fileCount: 2,
         files: ['static/index.html', 'static/style.css'] },
     ];
-    analysis.fileTrackMap = new Map([
+    analysis.fileTrackMap = Object.fromEntries([
       ['app/main.py', 'backend'],
       ['app/models.py', 'backend'],
       ['app/routes.py', 'backend'],

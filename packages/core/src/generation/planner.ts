@@ -94,7 +94,7 @@ export class Planner {
     this.log?.info(`[planner]   entryPoints: ${JSON.stringify(entryPoints.map(e => e.path))}`);
     this.log?.info(`[planner]   depGraph nodes: ${dependencyGraph.nodes.length} edges: ${dependencyGraph.edges.length}`);
     this.log?.info(`[planner]   layers: ${this.formatLayers(dependencyGraph.layers) || '(none)'}`);
-    this.log?.info(`[planner]   fileTrackMap size: ${analysis.fileTrackMap?.size ?? 0}`);
+    this.log?.info(`[planner]   fileTrackMap size: ${analysis.fileTrackMap ? Object.keys(analysis.fileTrackMap).length : 0}`);
     const response = await this.llmClient.complete(prompt, undefined, 'planner');
 
     let jsonStr = response.content.trim();

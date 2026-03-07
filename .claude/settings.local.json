@@ -47,7 +47,8 @@
       "Bash(where python:*)",
       "Bash(node:*)",
       "Bash(esbuild:*)",
-      "Bash(npx esbuild:*)"
+      "Bash(npx esbuild:*)",
+      "Read(//tmp/**)"
     ],
     "deny": [
       "Bash(git push --force*)",

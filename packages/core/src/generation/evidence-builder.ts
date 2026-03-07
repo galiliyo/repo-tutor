@@ -180,7 +180,7 @@ export async function readAndTruncate(
   };
 }
 
-function detectLanguage(filePath: string): string {
+export function detectLanguage(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   const langMap: Record<string, string> = {
     '.ts': 'typescript',

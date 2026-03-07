@@ -46,14 +46,18 @@ export async function detectEntryPoints(repoPath: string): Promise<FileReference
     'src/main.rs', 'src/lib.rs',
   ];
 
-  for (const entry of commonEntries) {
-    try {
+  const results = await Promise.allSettled(
+    commonEntries.map(async (entry) => {
       await fs.access(path.join(repoPath, entry));
+      return entry;
+    }),
+  );
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      const entry = result.value;
       if (!entryPoints.some(e => e.path === entry)) {
         entryPoints.push({ path: entry, reason: 'common entry filename' });
       }
-    } catch {
-      // File doesn't exist
     }
   }
 

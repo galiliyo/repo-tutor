@@ -19,6 +19,18 @@ export function buildDependencyGraph(
   }));
 
   const nodeSet = new Set(nodes.map(n => n.path));
+
+  // Pre-build lookup map: extensionless path → full path (and /index variants)
+  const pathLookup = new Map<string, string>();
+  for (const p of nodeSet) {
+    const noExt = p.replace(/\.[^.]+$/, '');
+    if (!pathLookup.has(noExt)) pathLookup.set(noExt, p);
+    if (/\/index\.[^.]+$/.test(p)) {
+      const dirPath = p.replace(/\/index\.[^.]+$/, '');
+      if (!pathLookup.has(dirPath)) pathLookup.set(dirPath, p);
+    }
+  }
+
   const edges: DependencyGraph['edges'] = [];
 
   for (const { filePath, imports } of fileImports) {
@@ -27,7 +39,7 @@ export function buildDependencyGraph(
     for (const imp of imports) {
       if (!imp.isRelative) continue;
 
-      const resolvedPath = resolveImport(filePath, imp.source, repoPath, nodeSet);
+      const resolvedPath = resolveImport(filePath, imp.source, repoPath, nodeSet, pathLookup);
       if (resolvedPath && nodeSet.has(resolvedPath)) {
         edges.push({
           from: fromPath,
@@ -56,15 +68,23 @@ function resolveImport(
   fromFile: string,
   importSource: string,
   repoPath: string,
-  nodeSet: Set<string>
+  nodeSet: Set<string>,
+  pathLookup?: Map<string, string>,
 ): string | null {
   const fromDir = path.dirname(fromFile);
-  const extensions = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.mts', '/index.ts', '/index.tsx', '/index.js'];
+  const candidate = path.relative(repoPath, path.join(fromDir, importSource));
 
+  // Fast path: try lookup map first (single map access instead of 8 extension trials)
+  if (pathLookup) {
+    const resolved = pathLookup.get(candidate);
+    if (resolved) return resolved;
+  }
+
+  // Slow fallback: try each extension
+  const extensions = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.mts', '/index.ts', '/index.tsx', '/index.js'];
   for (const ext of extensions) {
-    const candidate = path.join(fromDir, importSource + ext);
-    const relative = path.relative(repoPath, candidate);
-    // Check if this resolved path exists in our node set
+    const full = path.join(fromDir, importSource + ext);
+    const relative = path.relative(repoPath, full);
     if (!relative.startsWith('..') && nodeSet.has(relative)) {
       return relative;
     }

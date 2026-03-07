@@ -46,17 +46,19 @@ const questionsArraySchema = {
   items: questionSchema,
 };
 
+const moduleAjv = new Ajv();
+const compiledValidateQuestions = moduleAjv.compile(questionsArraySchema);
+const compiledValidateSingleQuestion = moduleAjv.compile(questionSchema);
+
 export class QuizGenerator {
-  private ajv = new Ajv();
-  private validateQuestions: ReturnType<Ajv['compile']>;
+  private ajv = moduleAjv;
+  private validateQuestions = compiledValidateQuestions;
 
   constructor(
     private llmClient: ILLMClient,
     private promptLoader: IPromptLoader,
     private log?: Logger,
-  ) {
-    this.validateQuestions = this.ajv.compile(questionsArraySchema);
-  }
+  ) {}
 
   async generate(chapter: ChapterContent, existingQuestions?: Question[]): Promise<Question[]> {
     // Build summary from actual section content
@@ -96,9 +98,16 @@ export class QuizGenerator {
       ? parsed
       : ((parsed as Record<string, unknown>).questions as unknown[] || []);
 
-    // Validate questions against schema
-    if (!this.validateQuestions(questions)) {
-      console.warn('Some questions failed validation:', this.validateQuestions.errors);
+    // Validate questions against schema — avoid Ajv type guard narrowing to `never`
+    const isValid = this.validateQuestions(questions) as boolean;
+    if (!isValid) {
+      this.log?.warn?.(`Quiz validation issues: ${JSON.stringify(this.validateQuestions.errors)}`);
+      // Filter to only valid questions instead of returning all
+      const valid = (questions as unknown[]).filter((q: unknown) => compiledValidateSingleQuestion(q));
+      if (valid.length === 0) {
+        throw new Error('LLM returned no valid quiz questions');
+      }
+      return valid as unknown as Question[];
     }
 
     return questions as Question[];
@@ -109,6 +118,12 @@ export class QuizGenerator {
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '');
     }
-    return JSON.parse(jsonStr);
+    try {
+      return JSON.parse(jsonStr);
+    } catch (err: any) {
+      throw new Error(
+        `Failed to parse LLM JSON (quiz-generator): ${err.message}\nResponse: ${jsonStr.slice(0, 300)}...`
+      );
+    }
   }
 }

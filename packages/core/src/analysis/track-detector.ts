@@ -180,9 +180,14 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function matchesImport(content: string, pkg: string): boolean {
+const importRegexCache = new Map<string, RegExp[]>();
+
+function getImportPatterns(pkg: string): RegExp[] {
+  let patterns = importRegexCache.get(pkg);
+  if (patterns) return patterns;
+
   const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const patterns: RegExp[] = [
+  patterns = [
     // JS/TS: from 'pkg' | require('pkg') (+ sub-paths)
     new RegExp(`['"]${escaped}(?:/[^'"]*)?['"]`),
     // Python: import pkg | from pkg import ...
@@ -196,7 +201,12 @@ function matchesImport(content: string, pkg: string): boolean {
     // Ruby: require 'pkg' | gem 'pkg'
     new RegExp(`(?:require|gem)\\s+['"]${escaped}['"]`),
   ];
-  return patterns.some(re => re.test(content));
+  importRegexCache.set(pkg, patterns);
+  return patterns;
+}
+
+function matchesImport(content: string, pkg: string): boolean {
+  return getImportPatterns(pkg).some(re => re.test(content));
 }
 
 function containsAny(content: string, patterns: string[]): boolean {
@@ -235,10 +245,10 @@ export function classifyFile(filePath: string, content?: string): TrackId | null
 
 export function classifyFileTrack(
   filePath: string,
-  fileTrackMap?: Map<string, TrackId>,
+  fileTrackMap?: Record<string, TrackId>,
 ): TrackId | 'shared' {
   if (fileTrackMap) {
-    const track = fileTrackMap.get(filePath);
+    const track = fileTrackMap[filePath];
     if (track) return track;
   }
   // Fallback to directory-based for cases where map wasn't provided
@@ -257,16 +267,25 @@ async function getFileContents(
   const sourceFiles = files.filter(isSourceFile).slice(0, 50);
   const result = new Map<string, string>();
 
-  for (const f of sourceFiles) {
-    if (provided && provided.has(f)) {
-      result.set(f, provided.get(f)!);
-    } else if (!provided) {
-      try {
-        const content = await fs.readFile(path.join(repoPath, f), 'utf-8');
-        result.set(f, content);
-      } catch {
-        // skip unreadable files
+  if (provided) {
+    for (const f of sourceFiles) {
+      if (provided.has(f)) {
+        result.set(f, provided.get(f)!);
       }
+    }
+  } else {
+    const entries = await Promise.all(
+      sourceFiles.map(async (f): Promise<[string, string] | null> => {
+        try {
+          const content = await fs.readFile(path.join(repoPath, f), 'utf-8');
+          return [f, content];
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const entry of entries) {
+      if (entry) result.set(entry[0], entry[1]);
     }
   }
 
@@ -452,11 +471,11 @@ function getTopDir(filePath: string): string | null {
  */
 export function inferDirectoryTracks(
   files: string[],
-  fileTrackMap: Map<string, TrackId>,
+  fileTrackMap: Record<string, TrackId>,
 ): void {
   // Count track occurrences per top-level dir (only from already-classified files)
   const dirCounts = new Map<string, Map<TrackId, number>>();
-  for (const [file, track] of fileTrackMap) {
+  for (const [file, track] of Object.entries(fileTrackMap)) {
     const dir = getTopDir(file);
     if (!dir) continue;
     let counts = dirCounts.get(dir);
@@ -487,11 +506,11 @@ export function inferDirectoryTracks(
 
   // Apply inferred directory tracks to unclassified files
   for (const file of files) {
-    if (fileTrackMap.has(file)) continue;
+    if (file in fileTrackMap) continue;
     const dir = getTopDir(file);
     if (!dir) continue;
     const inferred = dirTrackMap.get(dir);
-    if (inferred) fileTrackMap.set(file, inferred);
+    if (inferred) fileTrackMap[file] = inferred;
   }
 }
 
@@ -502,7 +521,7 @@ export async function detectTracks(
   files: string[],
   analysis: AnalysisResult,
   fileContents?: Map<string, string>,
-): Promise<{ tracks: Track[]; fileTrackMap: Map<string, TrackId> }> {
+): Promise<{ tracks: Track[]; fileTrackMap: Record<string, TrackId> }> {
   const contents = await getFileContents(repoPath, files, fileContents);
 
   // Check monorepo tools for architecture
@@ -520,10 +539,10 @@ export async function detectTracks(
   };
 
   // Build file-to-track map from content-classified files
-  const fileTrackMap = new Map<string, TrackId>();
+  const fileTrackMap: Record<string, TrackId> = {};
   for (const file of files) {
     const track = classifyFile(file, contents.get(file));
-    if (track) fileTrackMap.set(file, track);
+    if (track) fileTrackMap[file] = track;
   }
 
   // Infer directory tracks from classified files, then apply to unclassified ones
