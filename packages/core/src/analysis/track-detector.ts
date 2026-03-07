@@ -267,15 +267,19 @@ async function getFileContents(
   const sourceFiles = files.filter(isSourceFile).slice(0, 50);
   const result = new Map<string, string>();
 
-  if (provided) {
-    for (const f of sourceFiles) {
-      if (provided.has(f)) {
-        result.set(f, provided.get(f)!);
-      }
+  // Use provided contents where available, read missing files from disk
+  const toRead: string[] = [];
+  for (const f of sourceFiles) {
+    if (provided?.has(f)) {
+      result.set(f, provided.get(f)!);
+    } else {
+      toRead.push(f);
     }
-  } else {
+  }
+
+  if (toRead.length > 0) {
     const entries = await Promise.all(
-      sourceFiles.map(async (f): Promise<[string, string] | null> => {
+      toRead.map(async (f): Promise<[string, string] | null> => {
         try {
           const content = await fs.readFile(path.join(repoPath, f), 'utf-8');
           return [f, content];

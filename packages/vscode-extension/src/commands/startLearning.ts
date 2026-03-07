@@ -124,6 +124,7 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
     title: 'Select Learning Tracks',
     placeHolder: 'Choose which parts of the codebase to learn',
     canPickMany: true,
+    ignoreFocusOut: true,
   });
 
   if (!selectedItems || selectedItems.length === 0) {
