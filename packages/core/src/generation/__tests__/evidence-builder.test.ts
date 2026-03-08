@@ -328,6 +328,40 @@ describe('EvidenceBuilder.build()', () => {
     expect(pack.files.map(f => f.path)).toContain('static/app.js');
   });
 
+  it('filters modules by file-level track, excluding backend module from frontend evidence', async () => {
+    mockedFs.readFile.mockResolvedValue('const x = 1;');
+
+    const builder = new EvidenceBuilder();
+    const chapter = mkChapter({
+      targetFiles: ['static/app.js'],
+      trackId: 'frontend',
+    });
+    const analysis = mkAnalysis({
+      fileTrackMap: Object.fromEntries([
+        ['static/app.js', 'frontend'],
+        ['app/main.py', 'backend'],
+        ['app/utils.py', 'backend'],
+      ]),
+      modules: [
+        { name: 'app', path: 'app', fileCount: 2, files: ['app/main.py', 'app/utils.py'] },
+        { name: 'static', path: 'static', fileCount: 1, files: ['static/app.js'] },
+      ],
+    });
+
+    const pack = await builder.build(chapter, analysis);
+
+    // The 'app' module (all backend files) should be excluded from frontend evidence
+    const moduleNames = (pack as any).__filteredAnalysis_modules;
+    // Instead, verify indirectly: the backend module path 'app' would have passed
+    // the old m.path filter (classifyFileTrack('app') === 'shared'), but should
+    // now be excluded because its files are all backend.
+    // We can't directly inspect filteredAnalysis, but we can verify the pack
+    // only contains frontend files.
+    const paths = pack.files.map(f => f.path);
+    expect(paths).toContain('static/app.js');
+    expect(paths).not.toContain('app/main.py');
+  });
+
   it('build() accepts budget override', async () => {
     mockedFs.readFile.mockResolvedValue('const x = 1;');
 

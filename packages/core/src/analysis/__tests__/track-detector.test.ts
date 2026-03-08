@@ -218,9 +218,9 @@ describe('classifyFileTrack', () => {
     expect(classifyFileTrack('src/lib/logger.ts')).toBe('shared');
   });
 
-  it('returns shared for ambiguous paths', () => {
-    expect(classifyFileTrack('src/index.ts')).toBe('shared');
-    expect(classifyFileTrack('README.md')).toBe('shared');
+  it('returns unclassified for ambiguous paths', () => {
+    expect(classifyFileTrack('src/index.ts')).toBe('unclassified');
+    expect(classifyFileTrack('README.md')).toBe('unclassified');
   });
 
   it('handles backslash paths (Windows)', () => {
@@ -242,13 +242,13 @@ describe('classifyFileTrack', () => {
     expect(classifyFileTrack('src/routes/api.ts')).toBe('backend');
   });
 
-  it('returns shared for unknown files without map', () => {
-    expect(classifyFileTrack('lib/utils.ts')).toBe('shared');
+  it('returns unclassified for unknown files without map', () => {
+    expect(classifyFileTrack('lib/utils.ts')).toBe('unclassified');
   });
 
-  it('returns shared for unknown files not in map', () => {
+  it('returns unclassified for unknown files not in map', () => {
     const map: Record<string, TrackId> = {};
-    expect(classifyFileTrack('lib/utils.ts', map)).toBe('shared');
+    expect(classifyFileTrack('lib/utils.ts', map)).toBe('unclassified');
   });
 });
 

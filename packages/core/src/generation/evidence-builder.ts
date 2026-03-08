@@ -275,7 +275,16 @@ export class EvidenceBuilder {
       );
       filteredAnalysis = {
         ...analysis,
-        modules: (analysis.modules || []).filter(m => matchesTrack(m.path)),
+        modules: (analysis.modules || [])
+          .map(m => {
+            const filteredFiles = (m.files || []).filter(f => {
+              const cls = classifyFileTrack(f, analysis.fileTrackMap);
+              return cls === trackId || cls === 'shared';
+            });
+            if (filteredFiles.length === 0) return null;
+            return { ...m, files: filteredFiles, fileCount: filteredFiles.length };
+          })
+          .filter((m): m is NonNullable<typeof m> => m !== null),
         entryPoints: (analysis.entryPoints || []).filter(ep => matchesTrack(ep.path)),
         detectedTracks: (analysis.detectedTracks || []).filter(t => t.id === trackId),
         dependencyGraph: {

@@ -246,7 +246,7 @@ export function classifyFile(filePath: string, content?: string): TrackId | null
 export function classifyFileTrack(
   filePath: string,
   fileTrackMap?: Record<string, TrackId>,
-): TrackId | 'shared' {
+): TrackId | 'shared' | 'unclassified' {
   if (fileTrackMap) {
     const track = fileTrackMap[filePath];
     if (track) return track;
@@ -256,7 +256,7 @@ export function classifyFileTrack(
   if (BE_DIRS.some(d => fileMatchesDir(filePath, d))) return 'backend';
   if (INFRA_DIRS.some(d => fileMatchesDir(filePath, d))) return 'infra';
   if (ARCH_SHARED_DIRS.some(d => fileMatchesDir(filePath, d))) return 'shared';
-  return 'shared'; // ambiguous files included in all tracks
+  return 'unclassified';
 }
 
 async function getFileContents(
@@ -283,7 +283,8 @@ async function getFileContents(
         try {
           const content = await fs.readFile(path.join(repoPath, f), 'utf-8');
           return [f, content];
-        } catch {
+        } catch (err) {
+          console.warn(`[track-detector] Failed to read ${f}:`, err);
           return null;
         }
       }),
