@@ -3,7 +3,7 @@
 import type { ILLMClient } from './llm-client';
 import type { IPromptLoader } from './prompt-loader';
 import type { Answer } from '../types/quiz';
-import type { QuestionContext } from '../types/config';
+import type { QuestionContext, Logger } from '../types/config';
 
 /**
  * LLM response shape before mapping to our Answer type.
@@ -23,13 +23,15 @@ interface LLMAnswerResponse {
 export class QuestionAnswerer {
   constructor(
     private llmClient: ILLMClient,
-    private promptLoader: IPromptLoader
+    private promptLoader: IPromptLoader,
+    private log?: Logger,
   ) {}
 
   async answer(question: string, context: QuestionContext): Promise<Answer> {
+    this.log?.info(`[qa] "${question.slice(0, 60)}"`);
     const vars = this.buildTemplateVars(question, context);
     const prompt = this.promptLoader.load('question-answerer', vars);
-    const response = await this.llmClient.complete(prompt);
+    const response = await this.llmClient.complete(prompt, undefined, 'qa');
     const parsed = this.parseJSON(response.content);
 
     return {

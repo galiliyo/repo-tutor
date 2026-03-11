@@ -117,7 +117,7 @@ describe('Planner', () => {
 
     await planner.plan(analysis, userContext);
 
-    expect(mockLLMClient.complete).toHaveBeenCalledWith('the rendered prompt');
+    expect(mockLLMClient.complete).toHaveBeenCalledWith('the rendered prompt', undefined, 'planner');
   });
 
   it('should handle JSON response without code fence', async () => {

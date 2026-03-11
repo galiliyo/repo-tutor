@@ -10,10 +10,12 @@ export function activate(context: vscode.ExtensionContext) {
   // Output channel for LLM request/response logging
   const outputChannel = vscode.window.createOutputChannel('Repo Tutor');
   context.subscriptions.push(outputChannel);
+  const verbose = vscode.workspace.getConfiguration('repoTutor').get('logging.verbose', false);
   setCoreLogger({
     info: (msg) => outputChannel.appendLine(`[INFO]  ${msg}`),
     warn: (msg) => outputChannel.appendLine(`[WARN]  ${msg}`),
     error: (msg) => outputChannel.appendLine(`[ERROR] ${msg}`),
+    debug: (msg) => { if (verbose) outputChannel.appendLine(`[DEBUG] ${msg}`); },
   });
 
   console.log('Repo Tutor is now active');

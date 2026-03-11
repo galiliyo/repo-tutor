@@ -1,6 +1,6 @@
 // packages/core/src/generation/planner.ts
 
-import type { AnalysisResult, Chapter, UserContext } from '../types';
+import type { AnalysisResult, Chapter, UserContext, Logger } from '../types';
 import type { Track } from '../types/track';
 import type { ILLMClient } from './llm-client';
 import type { IPromptLoader } from './prompt-loader';
@@ -15,7 +15,8 @@ const TRACK_PATTERN_KEYWORDS: Record<string, string[]> = {
 export class Planner {
   constructor(
     private llmClient: ILLMClient,
-    private promptLoader: IPromptLoader
+    private promptLoader: IPromptLoader,
+    private log?: Logger,
   ) {}
 
   async plan(
@@ -67,7 +68,8 @@ export class Planner {
     });
 
     // Call LLM
-    const response = await this.llmClient.complete(prompt);
+    this.log?.info(`[planner] track=${track?.id ?? 'all'} modules=${modules.length} entryPoints=${entryPoints.length}`);
+    const response = await this.llmClient.complete(prompt, undefined, 'planner');
 
     let jsonStr = response.content.trim();
     if (jsonStr.startsWith('```')) {

@@ -1,13 +1,14 @@
 // packages/core/src/generation/chapter-writer.ts
 
-import type { EvidencePack, ChapterContent, ChapterOutline, UserContext } from '../types';
+import type { EvidencePack, ChapterContent, ChapterOutline, UserContext, Logger } from '../types';
 import type { ILLMClient } from './llm-client';
 import type { IPromptLoader } from './prompt-loader';
 
 export class ChapterWriter {
   constructor(
     private llmClient: ILLMClient,
-    private promptLoader: IPromptLoader
+    private promptLoader: IPromptLoader,
+    private log?: Logger,
   ) {}
 
   async generate(
@@ -28,7 +29,8 @@ export class ChapterWriter {
       completedChapters: completedChapters.join(', ') || 'None',
     });
 
-    const response = await this.llmClient.complete(prompt);
+    this.log?.info(`[chapter] "${chapterTitle}" evidence=${evidence.files.length} files`);
+    const response = await this.llmClient.complete(prompt, undefined, 'chapter');
 
     // Strip outer ```json fence if present — use greedy match to handle nested fences
     let jsonStr = response.content.trim();
@@ -75,7 +77,8 @@ export class ChapterWriter {
       evidencePack: evidence,
     });
 
-    const response = await this.llmClient.complete(prompt);
+    this.log?.info(`[chapter] outline "${chapterTitle}"`);
+    const response = await this.llmClient.complete(prompt, undefined, 'chapter');
 
     let jsonStr = response.content.trim();
     if (jsonStr.startsWith('```')) {

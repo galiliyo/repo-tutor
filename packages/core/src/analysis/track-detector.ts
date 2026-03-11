@@ -52,6 +52,7 @@ export const FE_FRAMEWORK_IMPORTS = [
 ];
 
 export const FE_DIRS = [
+  'frontend/', 'client/', 'web/',
   'src/components', 'src/pages', 'src/views', 'src/hooks', 'src/stores', 'public/', 'static/',
 ];
 
@@ -78,6 +79,7 @@ export const BE_FRAMEWORK_IMPORTS = [
 ];
 
 export const BE_DIRS = [
+  'backend/', 'server/', 'api/',
   'src/routes', 'src/controllers', 'src/middleware', 'src/models',
   'src/services', 'src/api', 'src/handlers',
   // Python

@@ -1530,13 +1530,8 @@ export class LearningPanel {
         feedbackP.innerHTML = evaluation.feedback;
         feedbackDiv.appendChild(feedbackP);
 
-        if (evaluation.explanation) {
-          const explainDiv = document.createElement('div');
-          explainDiv.style.fontStyle = 'italic';
-          // Explanation is pre-rendered to HTML by extension via marked
-          explainDiv.innerHTML = evaluation.explanation;
-          feedbackDiv.appendChild(explainDiv);
-        }
+        // Static explanation disabled — redundant with streamed explanation below.
+        // Showing both caused duplicate answers. See _submitAnswer() for context.
 
         questionDiv.appendChild(feedbackDiv);
 

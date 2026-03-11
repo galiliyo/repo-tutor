@@ -1,7 +1,7 @@
 // packages/core/src/quiz/generator.ts
 
 import Ajv from 'ajv';
-import type { ChapterContent, Question } from '../types';
+import type { ChapterContent, Question, Logger } from '../types';
 import type { ILLMClient } from '../generation/llm-client';
 import type { IPromptLoader } from '../generation/prompt-loader';
 
@@ -52,7 +52,8 @@ export class QuizGenerator {
 
   constructor(
     private llmClient: ILLMClient,
-    private promptLoader: IPromptLoader
+    private promptLoader: IPromptLoader,
+    private log?: Logger,
   ) {
     this.validateQuestions = this.ajv.compile(questionsArraySchema);
   }
@@ -86,7 +87,8 @@ export class QuizGenerator {
       existingQuestions: existingQuestions?.map(q => q.question) || [],
     });
 
-    const response = await this.llmClient.complete(prompt);
+    this.log?.info(`[quiz] generating for "${chapter.title}"`);
+    const response = await this.llmClient.complete(prompt, undefined, 'quiz');
     const parsed = this.parseJSON(response.content);
 
     // Handle both {questions: [...]} and direct array format
