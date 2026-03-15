@@ -184,9 +184,13 @@ export async function startLearningCommand(context: vscode.ExtensionContext) {
         .sort((a, b) => a.order - b.order)
         .map(c => c.id);
       panel.startPrefetchQueue(currentTrackChapters);
+    } else {
+      vscode.window.showWarningMessage('No chapters were generated. The LLM may need more context — try a different track.');
+      panel.dispose();
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     vscode.window.showErrorMessage(`Planning failed: ${message}`);
+    panel.dispose();
   }
 }

@@ -2,8 +2,6 @@
 
 VS Code extension that teaches developers unfamiliar codebases through chapter-based learning and quizzes. pnpm monorepo with two packages: `@repo-tutor/core` (pure TS, no VS Code deps) and `@repo-tutor/vscode` (extension, bundles core).
 
-You are running on wsl.
-
 answer with few words possible. ignore formal grammer /syntax for brevity, prefer fragments, code blocks, bullet lists, no fillers.
 
 ## Commands

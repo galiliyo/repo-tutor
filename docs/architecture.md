@@ -4,17 +4,17 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    VS Code Extension                         │
+│                    VS Code Extension                        │
 │  ┌─────────────┐  ┌─────────────────────────────────────┐   │
 │  │  Sidebar    │  │           Webview Panel             │   │
 │  │  (chapters) │  │  (content, diagrams, quizzes, Q&A)  │   │
 │  └─────────────┘  └─────────────────────────────────────┘   │
-│                              │                               │
-│                    imports   │                               │
-│                              ▼                               │
+│                              │                              │
+│                    imports   │                              │
+│                              ▼                              │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │                 @repo-tutor/core                       │  │
-│  │                                                        │  │
+│  │                 @repo-tutor/core                      │  │
+│  │                                                       │  │
 │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │  │
 │  │  │ Analysis │ │Generation│ │ Languages│ │   Quiz   │  │  │
 │  │  │ Pipeline │ │ (LLM)    │ │ (plugins)│ │ Engine   │  │  │

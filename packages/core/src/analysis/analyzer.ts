@@ -87,7 +87,7 @@ export class Analyzer {
     const moduleDirs = new Map<string, number>();
 
     for (const file of files) {
-      const parts = file.split(path.sep);
+      const parts = file.split('/');
       if (parts.length > 1) {
         const dir = parts[0];
         moduleDirs.set(dir, (moduleDirs.get(dir) || 0) + 1);
